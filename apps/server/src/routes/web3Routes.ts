@@ -1,7 +1,8 @@
-import express from "express";
+import { Router } from "express";
 import { applyToken, getAllTokenList, mintRequest, setWallet } from "../controllers/web3Controller";
 
-const router = express.Router();
+const router:Router = Router();
+
 
 router.post('/wallet', setWallet);
 router.post('/apply-token', applyToken);
