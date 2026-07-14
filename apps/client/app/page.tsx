@@ -1,3 +1,4 @@
+"use client"
 import Navbar from "@/feature/landing-page/component/navbar"
 
 import { Button } from "@/components/ui/button"
@@ -7,8 +8,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { useRouter } from "next/navigation"
 
 export default function Page() {
+  const router = useRouter();
   return (
     <>
       <Navbar />
@@ -43,8 +46,12 @@ export default function Page() {
             <Button
               size="lg"
               className="rounded-2xl bg-emerald-500 px-8 text-black hover:bg-emerald-400"
+              onClick={() => {
+                // "use client";
+                router.push("/dashboard")
+              }}
             >
-              Launch App
+              Start Transaction
             </Button>
 
             <Button
