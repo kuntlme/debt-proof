@@ -2,19 +2,27 @@
 
 import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
-import { Copy, ExternalLink, User, Mail, Calendar, ShieldCheck, Loader2 } from "lucide-react";
+import {
+  Copy, ExternalLink, User, Mail, Calendar, ShieldCheck, Loader2,
+  ArrowDownLeft, ArrowUpRight, Clock, TrendingUp, CheckCircle, AlertTriangle,
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 interface UserProfile {
   id: string;
   name?: string;
   email: string;
   image?: string;
+  username?: string;
+  phone?: string;
+  creditScore?: number;
   walletAddress?: string;
   createdAt: string;
   token?: {
@@ -26,21 +34,72 @@ interface UserProfile {
   _count: { borrowedLoans: number; lentLoans: number };
 }
 
+interface Loan {
+  id: string;
+  amountINR: number;
+  status: string;
+  createdAt: string;
+  repaidAt?: string;
+  borrower: { id: string; name?: string; email: string };
+  lender: { id: string; name?: string; email: string };
+  collateralToken: { symbol: string };
+}
+
+type ActivityRow = {
+  id: string;
+  type: "received" | "paid" | "requested" | "declined";
+  counterparty: string;
+  amount: number;
+  date: string;
+  status: string;
+};
+
+function buildActivity(loans: Loan[], userId: string): ActivityRow[] {
+  return loans.map((loan) => {
+    const isLender = loan.lender.id === userId;
+    const counterparty = isLender
+      ? loan.borrower.name || loan.borrower.email
+      : loan.lender.name || loan.lender.email;
+
+    let type: ActivityRow["type"] = "requested";
+    if (loan.status === "REPAID" && isLender) type = "received";
+    else if (loan.status === "REPAID" && !isLender) type = "paid";
+    else if (loan.status === "CANCELLED" || loan.status === "DEFAULTED") type = "declined";
+    else if (loan.status === "REQUESTED" && !isLender) type = "requested";
+
+    return { id: loan.id, type, counterparty, amount: Number(loan.amountINR), date: loan.createdAt, status: loan.status };
+  });
+}
+
+const activityConfig = {
+  received:  { label: "Payment Received",  icon: <ArrowDownLeft className="h-3.5 w-3.5" />, color: "text-emerald-400", bg: "bg-emerald-500/10" },
+  paid:      { label: "Payment Made",      icon: <ArrowUpRight className="h-3.5 w-3.5" />,  color: "text-red-400",     bg: "bg-red-500/10" },
+  requested: { label: "Request Sent",      icon: <Clock className="h-3.5 w-3.5" />,          color: "text-yellow-400",  bg: "bg-yellow-500/10" },
+  declined:  { label: "Declined/Defaulted",icon: <AlertTriangle className="h-3.5 w-3.5" />, color: "text-muted-foreground", bg: "bg-muted" },
+};
+
 export default function ProfilePage() {
   const { data: session } = useSession();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [initializingWallet, setInitializingWallet] = useState(false);
+  const [loans, setLoans] = useState<Loan[]>([]);
 
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/me`, {
-          headers: { Authorization: `Bearer ${await getJwt()}` },
-        });
-        if (res.ok) {
-          const data = await res.json();
+        const jwt = await getJwt();
+        const [profileRes, loansRes] = await Promise.all([
+          fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/me`, { headers: { Authorization: `Bearer ${jwt}` } }),
+          fetch(`${process.env.NEXT_PUBLIC_API_URL}/loans`, { headers: { Authorization: `Bearer ${jwt}` } }),
+        ]);
+        if (profileRes.ok) {
+          const data = await profileRes.json();
           setProfile(data.user);
+        }
+        if (loansRes.ok) {
+          const data = await loansRes.json();
+          setLoans(data.loans || []);
         }
       } catch {
         toast.error("Failed to load profile");
@@ -140,6 +199,20 @@ export default function ProfilePage() {
               </div>
             </div>
           ))}
+          {/* Credit score */}
+          {user?.creditScore !== undefined && (
+            <div className="flex items-center justify-between rounded-xl bg-accent/50 px-4 py-3">
+              <div>
+                <p className="text-xs text-muted-foreground">Credit Score</p>
+                <p className={cn("text-xl font-bold", user.creditScore >= 700 ? "text-emerald-400" : user.creditScore >= 500 ? "text-yellow-400" : "text-red-400")}>
+                  {user.creditScore}
+                </p>
+              </div>
+              <Badge variant="outline" className={cn("text-xs", user.creditScore >= 700 ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/20" : user.creditScore >= 500 ? "bg-yellow-500/15 text-yellow-400 border-yellow-500/20" : "bg-red-500/15 text-red-400 border-red-500/20")}>
+                {user.creditScore >= 700 ? "Low Risk" : user.creditScore >= 500 ? "Medium Risk" : "High Risk"}
+              </Badge>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -219,6 +292,50 @@ export default function ProfilePage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Recent Activity */}
+      <Card className="border-border/60">
+        <CardHeader>
+          <CardTitle className="text-base">Recent Activity</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loans.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">No activity yet</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border/50">
+                    {["Type", "Counterparty", "Amount", "Date", "Status"].map((h) => (
+                      <th key={h} className="text-left text-[10px] font-medium text-muted-foreground uppercase tracking-wider pb-2 pr-4 last:pr-0">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {buildActivity(loans, profile?.id || "").map((row) => {
+                    const cfg = activityConfig[row.type];
+                    return (
+                      <tr key={row.id} className="border-b border-border/20 last:border-0 hover:bg-accent/30 transition-colors">
+                        <td className="py-3 pr-4">
+                          <div className={cn("inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium", cfg.bg, cfg.color)}>
+                            {cfg.icon} {cfg.label}
+                          </div>
+                        </td>
+                        <td className="py-3 pr-4 text-sm truncate max-w-[120px]">{row.counterparty}</td>
+                        <td className="py-3 pr-4 font-semibold">₹{row.amount.toLocaleString("en-IN")}</td>
+                        <td className="py-3 pr-4 text-muted-foreground text-xs">{new Date(row.date).toLocaleDateString("en-IN")}</td>
+                        <td className="py-3">
+                          <span className="text-xs text-muted-foreground">{row.status}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

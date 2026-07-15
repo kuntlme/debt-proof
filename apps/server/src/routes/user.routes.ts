@@ -1,12 +1,23 @@
 import { Router } from "express";
-import { createUser, getUser, searchUsers, issueToken } from "../controllers/user.controller";
+import {
+  checkUsername,
+  completeOnboarding,
+  createUser,
+  getUser,
+  getPublicProfile,
+  searchUsers,
+  issueToken,
+} from "../controllers/user.controller";
 import { authMiddleware } from "../middleware/auth.middleware";
 
 const router: Router = Router();
 
-router.post("/token", issueToken);           // Issue JWT (called from Next.js after OAuth)
-router.post("/", createUser);                // Register / init wallet
-router.get("/me", authMiddleware, getUser);  // Get own profile
-router.get("/search", authMiddleware, searchUsers); // Search users for loan creation
+router.get("/check-username", checkUsername);                      // GET  /users/check-username?username=xxx  (public)
+router.post("/token", issueToken);                                  // POST /users/token  (called from Next.js)
+router.post("/onboarding", completeOnboarding);                    // POST /users/onboarding  (public — no wallet yet)
+router.post("/", createUser);                                       // POST /users  (legacy wallet init)
+router.get("/me", authMiddleware, getUser);                        // GET  /users/me
+router.get("/search", authMiddleware, searchUsers);                // GET  /users/search?q=...
+router.get("/:userId/profile", authMiddleware, getPublicProfile); // GET  /users/:userId/profile
 
 export default router;

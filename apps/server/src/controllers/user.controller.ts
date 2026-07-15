@@ -1,44 +1,141 @@
 import { Request, Response } from "express";
 import prisma from "@repo/db";
 import { generateWallet } from "../services/blockchain.service";
+import { deployDebtToken } from "../services/token.service";
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function encryptSecret(text: string): string {
+  const key = (process.env.WALLET_ENCRYPTION_SECRET || "default-key-32-bytes-exactly!!!!").slice(0, 32).padEnd(32, "0");
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv("aes-256-cbc", Buffer.from(key), iv);
+  const encrypted = Buffer.concat([cipher.update(text, "utf8"), cipher.final()]);
+  return iv.toString("hex") + ":" + encrypted.toString("hex");
+}
+
+// ── Controllers ───────────────────────────────────────────────────────────────
+
+/**
+ * GET /users/check-username?username=xxx
+ * Public — check if a username is still available.
+ */
+export const checkUsername = async (req: Request, res: Response) => {
+  try {
+    const { username } = req.query;
+    if (!username || typeof username !== "string" || username.length < 3) {
+      return res.status(400).json({ success: false, message: "Username must be at least 3 characters" });
+    }
+    const clean = username.toLowerCase().replace(/[^a-z0-9_]/g, "");
+    const existing = await prisma.user.findUnique({ where: { username: clean } });
+    return res.json({ success: true, available: !existing, username: clean });
+  } catch (error) {
+    console.error("[checkUsername]", error);
+    return res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+};
+
+/**
+ * POST /users/onboarding
+ * Complete first-time onboarding:
+ *   1. Save name, username, phone on the User record
+ *   2. Generate Ethereum wallet (returns mnemonic + private key ONE TIME)
+ *   3. Deploy personal DebtToken
+ *   4. Mark onboardingComplete = true
+ * Body: { userId, name, username, phone }
+ */
+export const completeOnboarding = async (req: Request, res: Response) => {
+  try {
+    const { userId, name, username, phone, skipToken } = req.body;
+    if (!userId || !name || !username || !phone) {
+      return res.status(400).json({ success: false, message: "userId, name, username and phone are required" });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+
+    if (user.onboardingComplete) {
+      return res.status(409).json({ success: false, message: "Onboarding already completed" });
+    }
+
+    const cleanUsername = username.toLowerCase().replace(/[^a-z0-9_]/g, "");
+    const taken = await prisma.user.findFirst({ where: { username: cleanUsername, NOT: { id: userId } } });
+    if (taken) return res.status(409).json({ success: false, message: "Username already taken" });
+
+    // 1. Generate wallet
+    const encryptionPassword = process.env.WALLET_ENCRYPTION_SECRET || userId;
+    const { address, encryptedJson, mnemonic, privateKey } = await generateWallet(encryptionPassword);
+
+    // 2. Encrypt seed phrase for storage (never returned again after this call)
+    const encryptedSeedPhrase = encryptSecret(mnemonic);
+
+    // 3. Deploy personal token (symbol derived from username, e.g. RAJ)
+    const symbol = cleanUsername.slice(0, 4).toUpperCase();
+    const tokenName = `${name.split(" ")[0]}'s Token`;
+    let tokenData: { contractAddress: string; id: string; tokenName: string; symbol: string; totalSupply: number } | null = null;
+
+    if (!skipToken) {
+      try {
+        const { contractAddress } = await deployDebtToken(address, tokenName, symbol, 100);
+        const dbToken = await prisma.personalToken.create({
+          data: { ownerId: userId, tokenName, symbol, contractAddress, totalSupply: 100 },
+        });
+        await prisma.tokenHolding.create({ data: { tokenId: dbToken.id, holderId: userId, balance: 100 } });
+        tokenData = { ...dbToken, totalSupply: 100 };
+      } catch (e) {
+        console.warn("[completeOnboarding] token deploy failed (non-fatal):", e);
+      }
+    }
+
+    // 4. Update user
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        name,
+        username: cleanUsername,
+        phone,
+        walletAddress: address,
+        encryptedSeedPhrase,
+        onboardingComplete: true,
+      },
+      select: { id: true, name: true, email: true, username: true, walletAddress: true, onboardingComplete: true },
+    });
+
+    // Return mnemonic + privateKey only once — never stored in plain text again
+    return res.status(201).json({
+      success: true,
+      user: updated,
+      wallet: { address, mnemonic, privateKey },
+      token: tokenData,
+    });
+  } catch (error) {
+    console.error("[completeOnboarding]", error);
+    return res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+};
 
 /**
  * POST /users
- * Register a user by generating them a wallet.
- * Called internally after OAuth login to initialize their wallet.
+ * Legacy: Register a user by generating them a wallet (kept for backward compat).
  */
 export const createUser = async (req: Request, res: Response) => {
   try {
     const { userId } = req.body;
-
-    if (!userId) {
-      return res.status(400).json({ success: false, message: "userId is required" });
-    }
+    if (!userId) return res.status(400).json({ success: false, message: "userId is required" });
 
     const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
-    }
-
+    if (!user) return res.status(404).json({ success: false, message: "User not found" });
     if (user.walletAddress) {
-      return res.status(409).json({
-        success: false,
-        message: "Wallet already exists",
-        walletAddress: user.walletAddress,
-      });
+      return res.status(409).json({ success: false, message: "Wallet already exists", walletAddress: user.walletAddress });
     }
 
-    // Generate a wallet. Password = userId (deterministic enough for demo; in prod use HSM)
     const encryptionPassword = process.env.WALLET_ENCRYPTION_SECRET || userId;
-    const { address, encryptedJson } = await generateWallet(encryptionPassword);
+    const { address } = await generateWallet(encryptionPassword);
 
     const updated = await prisma.user.update({
       where: { id: userId },
-      data: {
-        walletAddress: address,
-        // Store encrypted keystore JSON in a new field (add to schema if needed)
-      },
+      data: { walletAddress: address },
       select: { id: true, name: true, email: true, walletAddress: true },
     });
 
@@ -51,12 +148,11 @@ export const createUser = async (req: Request, res: Response) => {
 
 /**
  * GET /users/me
- * Return the authenticated user's profile including wallet address.
+ * Return the authenticated user's full profile.
  */
 export const getUser = async (req: Request, res: Response) => {
   try {
     const user = req.user!;
-
     const full = await prisma.user.findUnique({
       where: { id: user.id },
       select: {
@@ -64,26 +160,16 @@ export const getUser = async (req: Request, res: Response) => {
         name: true,
         email: true,
         image: true,
+        username: true,
+        phone: true,
+        creditScore: true,
         walletAddress: true,
+        onboardingComplete: true,
         createdAt: true,
-        token: {
-          select: {
-            id: true,
-            tokenName: true,
-            symbol: true,
-            contractAddress: true,
-            totalSupply: true,
-          },
-        },
-        _count: {
-          select: {
-            borrowedLoans: true,
-            lentLoans: true,
-          },
-        },
+        token: { select: { id: true, tokenName: true, symbol: true, contractAddress: true, totalSupply: true } },
+        _count: { select: { borrowedLoans: true, lentLoans: true } },
       },
     });
-
     return res.json({ success: true, user: full });
   } catch (error) {
     console.error("[getUser]", error);
@@ -92,8 +178,42 @@ export const getUser = async (req: Request, res: Response) => {
 };
 
 /**
+ * GET /users/:userId/profile
+ * Public profile — visible to all authenticated users.
+ */
+export const getPublicProfile = async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params as any;
+    const profile = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        image: true,
+        creditScore: true,
+        walletAddress: true,
+        createdAt: true,
+        token: { select: { tokenName: true, symbol: true, contractAddress: true, totalSupply: true } },
+        _count: { select: { borrowedLoans: true, lentLoans: true } },
+        borrowedLoans: {
+          take: 5,
+          orderBy: { createdAt: "desc" },
+          select: { id: true, amountINR: true, status: true, createdAt: true, repaidAt: true, durationDays: true },
+        },
+      },
+    });
+    if (!profile) return res.status(404).json({ success: false, message: "User not found" });
+    return res.json({ success: true, profile });
+  } catch (error) {
+    console.error("[getPublicProfile]", error);
+    return res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+};
+
+/**
  * GET /users/search?q=email
- * Search users by email/name (for loan creation — select lender)
+ * Search users by email/name/username for loan request targeting.
  */
 export const searchUsers = async (req: Request, res: Response) => {
   try {
@@ -107,18 +227,21 @@ export const searchUsers = async (req: Request, res: Response) => {
         OR: [
           { email: { contains: q, mode: "insensitive" } },
           { name: { contains: q, mode: "insensitive" } },
+          { username: { contains: q, mode: "insensitive" } },
         ],
-        NOT: { id: req.user!.id }, // Exclude self
+        NOT: { id: req.user!.id },
       },
       select: {
         id: true,
         name: true,
         email: true,
+        username: true,
         image: true,
+        creditScore: true,
         walletAddress: true,
         token: { select: { tokenName: true, symbol: true, contractAddress: true } },
       },
-      take: 10,
+      take: 15,
     });
 
     return res.json({ success: true, users });
@@ -130,19 +253,15 @@ export const searchUsers = async (req: Request, res: Response) => {
 
 /**
  * POST /users/token
- * Issue a JWT for the authenticated user (for the Express API)
+ * Issue a JWT for the authenticated user (called from Next.js after OAuth).
  */
 export const issueToken = async (req: Request, res: Response) => {
   try {
     const { userId } = req.body;
-    if (!userId) {
-      return res.status(400).json({ success: false, message: "userId is required" });
-    }
+    if (!userId) return res.status(400).json({ success: false, message: "userId is required" });
 
     const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
-    }
+    if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
     const secret = process.env.JWT_SECRET;
     if (!secret) throw new Error("JWT_SECRET not set");

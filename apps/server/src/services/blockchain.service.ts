@@ -82,14 +82,23 @@ export function getDebtTokenContract(contractAddress: string, signerOrProvider?:
 
 /**
  * Generate a new random Ethereum wallet.
- * Returns the address and encrypted keystore JSON.
+ * Returns the address, encrypted keystore JSON, mnemonic phrase, and private key.
+ * The mnemonic and privateKey are ONLY returned at onboarding — never stored in plain text.
  */
-export function generateWallet(encryptionPassword: string): Promise<{ address: string; encryptedJson: string }> {
-  const wallet = ethers.Wallet.createRandom();
-  return wallet.encrypt(encryptionPassword).then((encryptedJson) => ({
+export async function generateWallet(encryptionPassword: string): Promise<{
+  address: string;
+  encryptedJson: string;
+  mnemonic: string;
+  privateKey: string;
+}> {
+  const wallet = ethers.Wallet.createRandom() as ethers.HDNodeWallet;
+  const encryptedJson = await wallet.encrypt(encryptionPassword);
+  return {
     address: wallet.address,
     encryptedJson,
-  }));
+    mnemonic: wallet.mnemonic?.phrase ?? "",
+    privateKey: wallet.privateKey,
+  };
 }
 
 /**

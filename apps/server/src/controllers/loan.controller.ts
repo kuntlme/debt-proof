@@ -124,7 +124,7 @@ export const getLoans = async (req: Request, res: Response) => {
 
 export const getLoan = async (req: Request, res: Response) => {
   try {
-    const { loanId } = req.params;
+    const { loanId } = req.params as any;
     const user = req.user!;
     const loan = await prisma.loan.findUnique({
       where: { id: loanId },
@@ -147,7 +147,7 @@ export const getLoan = async (req: Request, res: Response) => {
 
 export const repayLoan = async (req: Request, res: Response) => {
   try {
-    const { loanId } = req.params;
+    const { loanId } = req.params as any;
     const borrower = req.user!;
     const loan = await prisma.loan.findUnique({ where: { id: loanId } });
     if (!loan) return res.status(404).json({ success: false, message: "Loan not found" });
@@ -172,7 +172,7 @@ export const repayLoan = async (req: Request, res: Response) => {
 
 export const defaultLoan = async (req: Request, res: Response) => {
   try {
-    const { loanId } = req.params;
+    const { loanId } = req.params as any;
     const lender = req.user!;
     const loan = await prisma.loan.findUnique({ where: { id: loanId } });
     if (!loan) return res.status(404).json({ success: false, message: "Loan not found" });
@@ -197,7 +197,7 @@ export const defaultLoan = async (req: Request, res: Response) => {
 
 export const cancelLoan = async (req: Request, res: Response) => {
   try {
-    const { loanId } = req.params;
+    const { loanId } = req.params as any;
     const borrower = req.user!;
     const loan = await prisma.loan.findUnique({ where: { id: loanId } });
     if (!loan) return res.status(404).json({ success: false, message: "Loan not found" });

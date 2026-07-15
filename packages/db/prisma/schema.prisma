@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client"
+  provider = "prisma-client-js"
   output   = "../generated/prisma"
 }
 
@@ -16,10 +16,21 @@ model User {
   accounts      Account[]
   sessions      Session[]
 
+  // Onboarding fields
+  username            String?  @unique
+  phone               String?
+  creditScore         Int      @default(500)
+  onboardingComplete  Boolean  @default(false)
+  encryptedSeedPhrase String?  // AES-encrypted BIP-39 mnemonic, never returned to client after onboarding
+
   walletAddress String?        @unique
   token         PersonalToken?
   borrowedLoans Loan[]         @relation("BorrowerLoans")
   lentLoans     Loan[]         @relation("LenderLoans")
+
+  // Loan request relations
+  loanRequests         LoanRequest[]        @relation("BorrowerRequests")
+  targetedByRequests   LoanRequestLender[]  @relation("LenderTargets")
 
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
@@ -124,4 +135,56 @@ model Loan {
 
   createdAt DateTime  @default(now())
   repaidAt  DateTime?
+  durationDays Int     @default(30)
+}
+
+// ── Loan Request (pre-Loan) ───────────────────────────────────────────────────
+
+enum LoanRequestType {
+  PUBLIC
+  TARGETED
+}
+
+enum LoanRequestStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  CANCELLED
+}
+
+model LoanRequest {
+  id         String            @id @default(cuid())
+  borrowerId String
+  borrower   User              @relation("BorrowerRequests", fields: [borrowerId], references: [id], onDelete: Cascade)
+
+  type          LoanRequestType
+  amountINR     Decimal         @db.Decimal(18, 2)
+  durationDays  Int
+  status        LoanRequestStatus @default(PENDING)
+  note          String?           // optional message from borrower
+
+  // Targeted lenders (empty for PUBLIC type)
+  targetedLenders LoanRequestLender[]
+
+  // If accepted → references the resulting Loan
+  loanId     String? @unique
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model LoanRequestLender {
+  id            String      @id @default(cuid())
+  loanRequestId String
+  loanRequest   LoanRequest @relation(fields: [loanRequestId], references: [id], onDelete: Cascade)
+
+  lenderId String
+  lender   User   @relation("LenderTargets", fields: [lenderId], references: [id], onDelete: Cascade)
+
+  status LoanRequestStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([loanRequestId, lenderId])
 }

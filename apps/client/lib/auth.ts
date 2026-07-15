@@ -23,22 +23,20 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
 
             if (!existingUser) return token;
 
-            const existingAccount = await getAccountByUserId(existingUser.id);
+            await getAccountByUserId(existingUser.id);
 
             token.name = existingUser.name;
             token.email = existingUser.email;
-            // token.profileComplete = existingUser.profileComplete;
-            // if (existingUser.username) {
-            //     token.username = existingUser.username;
-            // }
+            token.onboardingComplete = (existingUser as any).onboardingComplete ?? false;
+            token.username = (existingUser as any).username ?? null;
             return token;
         },
 
         async session({ session, token }) {
-            // Attach the user ID from the token to the session
             if (token.sub && session.user) {
                 session.user.id = token.sub;
-                // session.user.profileComplete = token.profileComplete as boolean;
+                (session.user as any).onboardingComplete = token.onboardingComplete ?? false;
+                (session.user as any).username = token.username ?? null;
             }
 
             return session;
@@ -49,7 +47,7 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
     },
     secret: process.env.AUTH_SECRET,
     trustHost: true,
-    adapter: PrismaAdapter(prisma),
+    adapter: PrismaAdapter(prisma as any),
     session: { strategy: "jwt" },
     ...authConfig,
 })

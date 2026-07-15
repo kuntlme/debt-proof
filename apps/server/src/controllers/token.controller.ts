@@ -110,7 +110,7 @@ export const getToken = async (req: Request, res: Response) => {
  */
 export const getTokenHolder = async (req: Request, res: Response) => {
   try {
-    const { tokenId } = req.params;
+    const { tokenId } = req.params as any;
 
     const token = await prisma.personalToken.findUnique({
       where: { id: tokenId },

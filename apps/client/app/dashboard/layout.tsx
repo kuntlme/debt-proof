@@ -11,21 +11,22 @@ import {
   User,
   LogOut,
   ChevronRight,
-  Wallet,
   Menu,
   X,
   ShieldCheck,
+  Bell,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const navItems = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
   { href: "/dashboard/loans", label: "Loans", icon: ArrowLeftRight },
   { href: "/dashboard/token", label: "My Token", icon: Coins },
   { href: "/dashboard/portfolio", label: "Portfolio", icon: BarChart3 },
+  { href: "/dashboard/notifications", label: "Notifications", icon: Bell },
   { href: "/dashboard/profile", label: "Profile", icon: User },
 ];
 
@@ -33,6 +34,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const { data: session } = useSession();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [notifCount, setNotifCount] = useState(0);
+
+  useEffect(() => {
+    async function fetchCount() {
+      try {
+        const res = await fetch("/api/auth/jwt");
+        if (!res.ok) return;
+        const { token } = await res.json();
+        const r = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/loan-requests/notifications/count`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (r.ok) { const d = await r.json(); setNotifCount(d.count || 0); }
+      } catch { }
+    }
+    fetchCount();
+  }, [pathname]);
 
   const user = session?.user;
   const initials = user?.name
@@ -79,6 +96,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <nav className="flex-1 space-y-1 px-3 py-4">
           {navItems.map(({ href, label, icon: Icon }) => {
             const active = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
+            const isNotif = href === "/dashboard/notifications";
             return (
               <Link
                 key={href}
@@ -93,7 +111,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               >
                 <Icon className={cn("h-4 w-4 shrink-0", active ? "text-emerald-400" : "")} />
                 {label}
-                {active && <ChevronRight className="ml-auto h-3 w-3 text-emerald-400" />}
+                {isNotif && notifCount > 0 && (
+                  <span className="ml-auto flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
+                    {notifCount > 99 ? "99+" : notifCount}
+                  </span>
+                )}
+                {active && !isNotif && <ChevronRight className="ml-auto h-3 w-3 text-emerald-400" />}
+                {active && isNotif && notifCount === 0 && <ChevronRight className="ml-auto h-3 w-3 text-emerald-400" />}
               </Link>
             );
           })}

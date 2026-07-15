@@ -1,321 +1,342 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { Search, ArrowRight, Info, Coins, IndianRupee, Loader2 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { useEffect, useState, useCallback, useRef } from "react";
+import {
+  Search, Globe, Users, ChevronRight, 
+  Loader2, X, ArrowRight, IndianRupee, Clock,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
+import { cn } from "@/lib/utils";
 
-interface UserResult {
+interface SearchUser {
   id: string;
   name?: string;
-  email: string;
+  email?: string;
+  username?: string;
   image?: string;
+  creditScore: number;
   walletAddress?: string;
-  token?: { tokenName: string; symbol: string; contractAddress: string };
+  token?: { tokenName: string; symbol: string };
 }
 
-export default function NewLoanPage() {
-  const { data: session } = useSession();
-  const router = useRouter();
+type Step = 1 | 2;
 
-  const [step, setStep] = useState<1 | 2>(1);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<UserResult[]>([]);
-  const [searching, setSearching] = useState(false);
-  const [selectedLender, setSelectedLender] = useState<UserResult | null>(null);
-  const [amount, setAmount] = useState("");
-  const [collateralAmount, setCollateralAmount] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+function creditRisk(score: number) {
+  if (score >= 700) return { label: "Low Risk", color: "bg-emerald-500/15 text-emerald-400 border-emerald-500/20" };
+  if (score >= 500) return { label: "Medium Risk", color: "bg-yellow-500/15 text-yellow-400 border-yellow-500/20" };
+  return { label: "High Risk", color: "bg-red-500/15 text-red-400 border-red-500/20" };
+}
 
-  async function handleSearch() {
-    if (searchQuery.length < 2) return;
-    setSearching(true);
-    try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/users/search?q=${encodeURIComponent(searchQuery)}`,
-        { headers: { Authorization: `Bearer ${await getJwt()}` } }
-      );
-      if (res.ok) {
-        const data = await res.json();
-        setSearchResults(data.users || []);
-      }
-    } catch {
-      toast.error("Search failed");
-    } finally {
-      setSearching(false);
-    }
-  }
-
-  async function handleSubmit() {
-    if (!selectedLender || !amount || !collateralAmount) {
-      toast.error("Please fill all fields");
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      // First get user's token
-      const tokenRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/tokens/me`, {
-        headers: { Authorization: `Bearer ${await getJwt()}` },
-      });
-      if (!tokenRes.ok) {
-        toast.error("You need a personal token to create a loan. Create one first.");
-        router.push("/dashboard/token");
-        return;
-      }
-      const { token } = await tokenRes.json();
-
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/loans`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${await getJwt()}`,
-        },
-        body: JSON.stringify({
-          lenderId: selectedLender.id,
-          amountINR: parseFloat(amount),
-          collateralTokenId: token.id,
-          collateralAmount: parseFloat(collateralAmount),
-        }),
-      });
-
-      const data = await res.json();
-      if (res.ok && data.success) {
-        toast.success("IOU created successfully!", {
-          description: data.txHash ? `Tx: ${data.txHash.slice(0, 18)}...` : "Recorded off-chain",
-        });
-        router.push(`/dashboard/loans/${data.loan.id}`);
-      } else {
-        toast.error(data.message || "Failed to create loan");
-      }
-    } catch (e) {
-      toast.error("Something went wrong");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <div className="max-w-2xl mx-auto space-y-6 p-6 lg:p-8">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Create a Loan IOU</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Borrow money from another user and record it immutably on the blockchain.
-        </p>
-      </div>
-
-      {/* Steps indicator */}
-      <div className="flex items-center gap-3">
-        {[
-          { n: 1, label: "Select Lender" },
-          { n: 2, label: "Loan Details" },
-        ].map(({ n, label }, i) => (
-          <div key={n} className="flex items-center gap-2">
-            <div
-              className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold transition-colors ${
-                step >= n
-                  ? "bg-emerald-500 text-black"
-                  : "bg-muted text-muted-foreground"
-              }`}
-            >
-              {n}
-            </div>
-            <span className={`text-sm ${step >= n ? "font-medium" : "text-muted-foreground"}`}>
-              {label}
-            </span>
-            {i === 0 && <ArrowRight className="h-4 w-4 text-muted-foreground mx-1" />}
-          </div>
-        ))}
-      </div>
-
-      {/* Step 1: Select Lender */}
-      {step === 1 && (
-        <Card className="border-border/60">
-          <CardHeader>
-            <CardTitle className="text-base">Who are you borrowing from?</CardTitle>
-            <CardDescription>Search by name or email address</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search users..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                  className="pl-9 rounded-xl bg-card border-border/60"
-                />
-              </div>
-              <Button
-                onClick={handleSearch}
-                disabled={searching || searchQuery.length < 2}
-                className="rounded-xl bg-emerald-500 text-black hover:bg-emerald-400"
-              >
-                {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : "Search"}
-              </Button>
-            </div>
-
-            {searchResults.length > 0 && (
-              <div className="space-y-2">
-                {searchResults.map((u) => (
-                  <div
-                    key={u.id}
-                    onClick={() => { setSelectedLender(u); setStep(2); }}
-                    className={`flex items-center gap-3 rounded-xl border p-3 cursor-pointer transition-all hover:border-emerald-500/40 hover:bg-emerald-500/5 ${
-                      selectedLender?.id === u.id ? "border-emerald-500/50 bg-emerald-500/10" : "border-border/60"
-                    }`}
-                  >
-                    <Avatar className="h-10 w-10">
-                      <AvatarImage src={u.image} />
-                      <AvatarFallback className="bg-emerald-500/20 text-emerald-400 text-xs font-bold">
-                        {(u.name || u.email).slice(0, 2).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold">{u.name || "—"}</p>
-                      <p className="text-xs text-muted-foreground truncate">{u.email}</p>
-                      {u.token && (
-                        <span className="inline-flex items-center gap-1 mt-1 text-[10px] text-emerald-400">
-                          <Coins className="h-3 w-3" /> {u.token.tokenName} ({u.token.symbol})
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-xs text-muted-foreground font-mono">
-                      {u.walletAddress ? `${u.walletAddress.slice(0, 6)}...${u.walletAddress.slice(-4)}` : "No wallet"}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Step 2: Loan Details */}
-      {step === 2 && selectedLender && (
-        <div className="space-y-4">
-          {/* Selected lender recap */}
-          <Card className="border-emerald-500/20 bg-emerald-500/5">
-            <CardContent className="flex items-center gap-3 p-4">
-              <Avatar className="h-10 w-10">
-                <AvatarImage src={selectedLender.image} />
-                <AvatarFallback className="bg-emerald-500/20 text-emerald-400 text-xs font-bold">
-                  {(selectedLender.name || selectedLender.email).slice(0, 2).toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex-1">
-                <p className="text-sm font-semibold">Lender: {selectedLender.name || selectedLender.email}</p>
-                <p className="text-xs text-muted-foreground font-mono">
-                  {selectedLender.walletAddress?.slice(0, 18)}...
-                </p>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => { setSelectedLender(null); setStep(1); }}
-                className="text-xs text-muted-foreground"
-              >
-                Change
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card className="border-border/60">
-            <CardHeader>
-              <CardTitle className="text-base">Loan Details</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-5">
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Loan Amount (₹ INR)</Label>
-                <div className="relative">
-                  <IndianRupee className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    type="number"
-                    placeholder="e.g. 5000"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    className="pl-9 rounded-xl bg-card border-border/60"
-                    min="1"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Collateral Amount (your tokens)</Label>
-                <div className="relative">
-                  <Coins className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    type="number"
-                    placeholder="e.g. 10"
-                    value={collateralAmount}
-                    onChange={(e) => setCollateralAmount(e.target.value)}
-                    className="pl-9 rounded-xl bg-card border-border/60"
-                    min="0.01"
-                    step="0.01"
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground flex items-center gap-1">
-                  <Info className="h-3 w-3" />
-                  Your tokens will be locked as collateral on the blockchain until repayment.
-                </p>
-              </div>
-
-              {/* IOU Preview */}
-              {amount && collateralAmount && (
-                <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 space-y-2">
-                  <p className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">IOU Preview</p>
-                  <p className="text-sm text-muted-foreground">
-                    <span className="font-semibold text-foreground">{(session?.user as any)?.name || "You"}</span> will borrow{" "}
-                    <span className="font-bold text-emerald-400">
-                      ₹{parseFloat(amount).toLocaleString("en-IN")}
-                    </span>{" "}
-                    from{" "}
-                    <span className="font-semibold text-foreground">{selectedLender.name || selectedLender.email}</span>,
-                    locking{" "}
-                    <span className="font-bold text-emerald-400">{collateralAmount} tokens</span> as collateral on the blockchain.
-                  </p>
-                </div>
-              )}
-
-              <div className="flex gap-3 pt-2">
-                <Button
-                  variant="outline"
-                  className="flex-1 rounded-xl"
-                  onClick={() => setStep(1)}
-                >
-                  Back
-                </Button>
-                <Button
-                  className="flex-1 rounded-xl bg-emerald-500 text-black hover:bg-emerald-400"
-                  onClick={handleSubmit}
-                  disabled={submitting || !amount || !collateralAmount}
-                >
-                  {submitting ? (
-                    <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Submitting...</>
-                  ) : (
-                    "Create IOU on Blockchain"
-                  )}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-    </div>
-  );
+function toDays(n: number, unit: "days" | "weeks" | "months") {
+  if (unit === "weeks") return n * 7;
+  if (unit === "months") return n * 30;
+  return n;
 }
 
 async function getJwt(): Promise<string> {
   try {
     const res = await fetch("/api/auth/jwt");
     if (res.ok) { const d = await res.json(); return d.token || ""; }
-  } catch {}
+  } catch { }
   return "";
+}
+
+export default function NewLoanRequestPage() {
+  const router = useRouter();
+  const [step, setStep] = useState<Step>(1);
+  const [isPublic, setIsPublic] = useState(false);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<SearchUser[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [selected, setSelected] = useState<SearchUser[]>([]);
+  const [amount, setAmount] = useState("");
+  const [duration, setDuration] = useState("");
+  const [durationUnit, setDurationUnit] = useState<"days" | "weeks" | "months">("days");
+  const [note, setNote] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const doSearch = useCallback(async (q: string) => {
+    if (q.length < 2) { setResults([]); return; }
+    setSearching(true);
+    try {
+      const jwt = await getJwt();
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/search?q=${encodeURIComponent(q)}`, {
+        headers: { Authorization: `Bearer ${jwt}` },
+      });
+      if (res.ok) { const data = await res.json(); setResults(data.users || []); }
+    } catch { } finally { setSearching(false); }
+  }, []);
+
+  useEffect(() => {
+    if (searchTimeout.current) clearTimeout(searchTimeout.current);
+    searchTimeout.current = setTimeout(() => doSearch(query), 400);
+  }, [query, doSearch]);
+
+  function toggleSelect(user: SearchUser) {
+    setSelected((prev) =>
+      prev.find((u) => u.id === user.id) ? prev.filter((u) => u.id !== user.id) : [...prev, user]
+    );
+  }
+
+  async function handleSubmit() {
+    const amountNum = parseFloat(amount);
+    const durationNum = parseInt(duration);
+    if (!amount || isNaN(amountNum) || amountNum <= 0) { toast.error("Enter a valid loan amount"); return; }
+    if (!duration || isNaN(durationNum) || durationNum <= 0) { toast.error("Enter a valid loan duration"); return; }
+    if (!isPublic && selected.length === 0) { toast.error("Select at least one lender or enable Public Post"); return; }
+
+    setSubmitting(true);
+    try {
+      const jwt = await getJwt();
+      const body = {
+        type: isPublic ? "PUBLIC" : "TARGETED",
+        amountINR: amountNum,
+        durationDays: toDays(durationNum, durationUnit),
+        lenderIds: isPublic ? [] : selected.map((u) => u.id),
+        note: note || undefined,
+      };
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/loan-requests`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${jwt}` },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        toast.success(isPublic ? "Loan request posted publicly!" : `Request sent to ${selected.length} lender(s)!`);
+        router.push("/dashboard/notifications");
+      } else {
+        toast.error(data.message || "Failed to send request");
+      }
+    } catch { toast.error("Something went wrong"); } finally { setSubmitting(false); }
+  }
+
+  return (
+    <div className="max-w-2xl mx-auto space-y-6 p-6 lg:p-8">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">New Loan Request</h1>
+        <div className="flex items-center gap-2 mt-3">
+          {[{ n: 1, label: "Select Lenders" }, { n: 2, label: "Loan Details" }].map(({ n, label }, i) => (
+            <div key={n} className="flex items-center gap-2">
+              {i > 0 && <ArrowRight className="h-3 w-3 text-muted-foreground" />}
+              <div className={cn("flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full transition-all",
+                step === n ? "bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/20" : "bg-white/5 text-muted-foreground"
+              )}>
+                <span>{n}</span> {label}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* STEP 1 */}
+      {step === 1 && (
+        <div className="space-y-5 animate-in fade-in duration-400">
+          {/* Public toggle */}
+          <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] p-4">
+            <div className="flex items-center gap-3">
+              <div className={cn("flex h-9 w-9 items-center justify-center rounded-lg", isPublic ? "bg-emerald-500/15" : "bg-white/5")}>
+                <Globe className={cn("h-4 w-4", isPublic ? "text-emerald-400" : "text-muted-foreground")} />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-white">Public Post</p>
+                <p className="text-xs text-muted-foreground">Visible to all users on the platform</p>
+              </div>
+            </div>
+            <button
+              id="toggle-public"
+              onClick={() => { setIsPublic(!isPublic); if (!isPublic) setSelected([]); }}
+              className={cn("relative inline-flex h-6 w-11 items-center rounded-full transition-colors", isPublic ? "bg-emerald-500" : "bg-white/10")}
+            >
+              <span className={cn("inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform", isPublic ? "translate-x-6" : "translate-x-1")} />
+            </button>
+          </div>
+
+          {/* Search */}
+          {!isPublic && (
+            <div className="space-y-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                {searching && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />}
+                <Input
+                  id="lender-search"
+                  placeholder="Search by name, @username or email…"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  className="pl-9 pr-9 bg-white/5 border-white/10 text-white placeholder:text-muted-foreground/50 rounded-xl focus:border-emerald-500/50"
+                />
+              </div>
+
+              {results.length > 0 && (
+                <div className="rounded-xl border border-white/10 bg-white/[0.02] overflow-hidden">
+                  <div className="grid grid-cols-[1fr_auto_auto_auto] gap-3 px-4 py-2 border-b border-white/5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                    <span>User</span><span>@Username</span><span>Credit Score</span><span>Select</span>
+                  </div>
+                  {results.map((user) => {
+                    const isSelected = !!selected.find((u) => u.id === user.id);
+                    const risk = creditRisk(user.creditScore);
+                    return (
+                      <div
+                        key={user.id}
+                        onClick={() => toggleSelect(user)}
+                        className={cn("grid grid-cols-[1fr_auto_auto_auto] gap-3 items-center px-4 py-3 cursor-pointer transition-colors border-b border-white/5 last:border-0 hover:bg-white/5", isSelected && "bg-emerald-500/5")}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Avatar className="h-7 w-7 shrink-0">
+                            <AvatarImage src={user.image ?? ""} />
+                            <AvatarFallback className="text-[10px] bg-emerald-500/20 text-emerald-400">
+                              {user.name?.[0] || user.email?.[0] || "?"}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span className="text-sm truncate text-white">{user.name || user.email}</span>
+                        </div>
+                        <span className="text-xs text-muted-foreground">@{user.username || "—"}</span>
+                        <span className={cn("text-[10px] font-medium border px-2 py-0.5 rounded-full", risk.color)}>{user.creditScore}</span>
+                        <Checkbox
+                          checked={isSelected}
+                          className="border-white/30 data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500"
+                          onCheckedChange={() => toggleSelect(user)}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {query.length >= 2 && !searching && results.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">No users found for "{query}"</p>
+              )}
+
+              {selected.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Selected ({selected.length})</p>
+                  <div className="flex flex-wrap gap-2">
+                    {selected.map((u) => (
+                      <div key={u.id} className="flex items-center gap-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1">
+                        <span className="text-xs text-emerald-400">{u.name || u.email}</span>
+                        <button onClick={(e) => { e.stopPropagation(); toggleSelect(u); }} className="text-emerald-400/60 hover:text-emerald-400">
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {isPublic && (
+            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 flex items-center gap-3">
+              <Users className="h-4 w-4 text-emerald-400 shrink-0" />
+              <p className="text-sm text-emerald-300">Your request will be visible to all registered lenders on the platform.</p>
+            </div>
+          )}
+
+          <Button
+            id="step1-next"
+            onClick={() => setStep(2)}
+            disabled={!isPublic && selected.length === 0}
+            className="w-full rounded-xl bg-emerald-500 text-black font-semibold hover:bg-emerald-400 h-11 gap-2 disabled:opacity-50"
+          >
+            Next: Loan Details <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
+
+      {/* STEP 2 */}
+      {step === 2 && (
+        <div className="space-y-5 animate-in fade-in duration-400">
+          <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground -ml-2" onClick={() => setStep(1)}>
+            ← Back to Lenders
+          </Button>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Loan Amount (INR)</Label>
+              <div className="relative">
+                <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="loan-amount"
+                  type="number"
+                  placeholder="5000"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="pl-9 bg-white/5 border-white/10 text-white placeholder:text-muted-foreground/50 rounded-xl focus:border-emerald-500/50"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Loan Period</Label>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="loan-duration"
+                    type="number"
+                    placeholder="30"
+                    value={duration}
+                    onChange={(e) => setDuration(e.target.value)}
+                    className="pl-9 bg-white/5 border-white/10 text-white placeholder:text-muted-foreground/50 rounded-xl focus:border-emerald-500/50"
+                  />
+                </div>
+                <select
+                  id="duration-unit"
+                  value={durationUnit}
+                  onChange={(e) => setDurationUnit(e.target.value as "days" | "weeks" | "months")}
+                  className="rounded-xl border border-white/10 bg-[#0a0a0a] text-white text-sm px-3 focus:outline-none focus:border-emerald-500/50"
+                >
+                  <option value="days">Days</option>
+                  <option value="weeks">Weeks</option>
+                  <option value="months">Months</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Note (optional)</Label>
+            <textarea
+              id="loan-note"
+              placeholder="Add a short message to the lender…"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              rows={3}
+              className="w-full rounded-xl border border-white/10 bg-white/5 text-white placeholder:text-muted-foreground/50 text-sm px-3 py-2.5 resize-none focus:outline-none focus:border-emerald-500/50"
+            />
+          </div>
+
+          {/* Summary */}
+          <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 space-y-2">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Summary</p>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Type</span>
+              <Badge variant="outline" className={cn("text-xs", isPublic ? "bg-blue-500/15 text-blue-400 border-blue-500/20" : "bg-purple-500/15 text-purple-400 border-purple-500/20")}>
+                {isPublic ? "Public" : `Targeted — ${selected.length} lender(s)`}
+              </Badge>
+            </div>
+            {amount && <div className="flex items-center justify-between text-sm"><span className="text-muted-foreground">Amount</span><span className="font-semibold">₹{parseFloat(amount).toLocaleString("en-IN")}</span></div>}
+            {duration && <div className="flex items-center justify-between text-sm"><span className="text-muted-foreground">Duration</span><span className="font-semibold">{toDays(parseInt(duration), durationUnit)} days</span></div>}
+          </div>
+
+          <Button
+            id="submit-loan-request"
+            onClick={handleSubmit}
+            disabled={submitting}
+            className="w-full rounded-xl bg-emerald-500 text-black font-semibold hover:bg-emerald-400 h-11 gap-2 disabled:opacity-60"
+          >
+            {submitting ? <><Loader2 className="h-4 w-4 animate-spin" /> Sending…</> : isPublic ? "Post Public Request" : `Send to ${selected.length} Lender(s)`}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
 }
