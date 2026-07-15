@@ -1,6 +1,9 @@
 import { Request, Response } from "express";
 import prisma from "@repo/db";
 import { z } from "zod";
+import { ethers } from "ethers";
+import { createLoanOnChain, activateLoanOnChain } from "../services/loan.service";
+import { getPrivateKeyForUser } from "../services/wallet.service";
 
 // ── Schemas ──────────────────────────────────────────────────────────────────
 
@@ -36,6 +39,30 @@ export const createLoanRequest = async (req: Request, res: Response) => {
         return res.status(400).json({ success: false, message: "Cannot request a loan from yourself" });
       }
     }
+
+    // ── Token pre-flight: borrower must have a personal token with balance > 0 ─
+    const borrowerToken = await prisma.personalToken.findUnique({
+      where: { ownerId: borrower.id },
+      include: { tokenHoldings: { where: { holderId: borrower.id } } },
+    });
+
+    if (!borrowerToken) {
+      return res.status(400).json({
+        success: false,
+        message: "You must create your personal token before requesting a loan. Go to My Token to set it up.",
+        code: "TOKEN_REQUIRED",
+      });
+    }
+
+    const ownHolding = (borrowerToken.tokenHoldings as Array<{ balance: any }>)[0];
+    if (!ownHolding || Number(ownHolding.balance) <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "You have no token balance available to use as collateral.",
+        code: "INSUFFICIENT_TOKEN_BALANCE",
+      });
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     const request = await prisma.loanRequest.create({
       data: {
@@ -223,20 +250,23 @@ export const acceptLoanRequest = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: "Borrower has not initialized a token (no collateral available)" });
     }
 
-    // Create the Loan record
+    // Use 10 tokens as default collateral (10% of the 100 token supply)
+    const collateralAmount = 10;
+
+    // 1. Create the Loan DB record (status REQUESTED until on-chain confirmation)
     const loan = await prisma.loan.create({
       data: {
         borrowerId: request.borrowerId,
         lenderId: lender.id,
         amountINR: request.amountINR,
         collateralTokenId: borrowerToken.id,
-        collateralAmount: 10, // default 10% of supply as collateral
+        collateralAmount,
         durationDays: request.durationDays,
-        status: "ACTIVE",
+        status: "REQUESTED",
       },
     });
 
-    // Mark request + lenderRow accepted
+    // 2. Mark request + lenderRow accepted in DB
     await prisma.$transaction([
       prisma.loanRequest.update({ where: { id }, data: { status: "ACCEPTED", loanId: loan.id } }),
       ...(request.type === "TARGETED"
@@ -249,6 +279,44 @@ export const acceptLoanRequest = async (req: Request, res: Response) => {
         : []),
     ]);
 
+    // 3. Attempt on-chain creation (non-fatal — loan stays in DB even if blockchain is down)
+    let blockchainLoanId: number | null = null;
+    let txHash: string | null = null;
+    try {
+      const borrowerKey = await getPrivateKeyForUser(request.borrowerId);
+      const lenderUser = await prisma.user.findUnique({
+        where: { id: lender.id },
+        select: { walletAddress: true },
+      });
+      if (!lenderUser?.walletAddress) throw new Error("Lender has no wallet address");
+
+      // Borrower approves + locks collateral on-chain
+      const collateralAmountWei = ethers.parseUnits(collateralAmount.toString(), 18).toString();
+      const onChainResult = await createLoanOnChain({
+        lenderAddress: lenderUser.walletAddress,
+        amountINRPaise: Math.round(Number(request.amountINR) * 100),
+        collateralTokenAddress: borrowerToken.contractAddress,
+        collateralAmountWei,
+        offchainId: loan.id,
+        borrowerPrivateKey: borrowerKey,
+      });
+      blockchainLoanId = onChainResult.loanId;
+      txHash = onChainResult.txHash;
+
+      // Lender immediately activates the loan on-chain
+      const lenderKey = await getPrivateKeyForUser(lender.id);
+      await activateLoanOnChain(blockchainLoanId, lenderKey);
+
+      // Update DB with on-chain data
+      await prisma.loan.update({
+        where: { id: loan.id },
+        data: { blockchainLoanId, txHash, status: "ACTIVE" },
+      });
+    } catch (e) {
+      console.warn("[acceptLoanRequest] blockchain call failed (non-fatal):", e);
+      // Leave status as REQUESTED so lender can retry activation manually
+    }
+
     const full = await prisma.loan.findUnique({
       where: { id: loan.id },
       include: {
@@ -258,7 +326,7 @@ export const acceptLoanRequest = async (req: Request, res: Response) => {
       },
     });
 
-    return res.status(201).json({ success: true, loan: full });
+    return res.status(201).json({ success: true, loan: full, blockchainLoanId, txHash });
   } catch (error) {
     console.error("[acceptLoanRequest]", error);
     return res.status(500).json({ success: false, message: "Internal Server Error" });

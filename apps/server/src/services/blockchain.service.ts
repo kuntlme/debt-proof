@@ -1,39 +1,10 @@
 import { ethers } from "ethers";
-import * as fs from "fs";
-import * as path from "path";
+import {
+  DebtTokenABI,
+  LoanManagerABI,
+  loadDeployment,
+} from "@repo/contracts";
 
-// ─── ABI loading ─────────────────────────────────────────────────────────────
-
-function loadABI(contractName: string) {
-  // Try to load from compiled contracts artifacts
-  const artifactPaths = [
-    path.join(__dirname, "../../../packages/contracts/artifacts/contracts", `${contractName}.sol`, `${contractName}.json`),
-    path.join(__dirname, `../../contracts/artifacts/contracts/${contractName}.sol/${contractName}.json`),
-  ];
-
-  for (const p of artifactPaths) {
-    if (fs.existsSync(p)) {
-      const artifact = JSON.parse(fs.readFileSync(p, "utf8"));
-      return artifact.abi;
-    }
-  }
-
-  throw new Error(`ABI not found for ${contractName}. Run: pnpm --filter @repo/contracts compile`);
-}
-
-function loadDeployment(networkName: string = "localhost") {
-  const deploymentPaths = [
-    path.join(__dirname, "../../../packages/contracts/deployments", `${networkName}.json`),
-  ];
-
-  for (const p of deploymentPaths) {
-    if (fs.existsSync(p)) {
-      return JSON.parse(fs.readFileSync(p, "utf8"));
-    }
-  }
-
-  return null;
-}
 
 // ─── Provider & Signer ───────────────────────────────────────────────────────
 
@@ -67,15 +38,13 @@ export function getLoanManagerContract(signerOrProvider?: ethers.Signer | ethers
     throw new Error("LoanManager not deployed. Run: pnpm --filter @repo/contracts deploy:local");
   }
 
-  const abi = loadABI("LoanManager");
   const sp = signerOrProvider || getProvider();
-  return new ethers.Contract(deployment.contracts.LoanManager, abi, sp);
+  return new ethers.Contract(deployment.contracts.LoanManager, LoanManagerABI, sp);
 }
 
 export function getDebtTokenContract(contractAddress: string, signerOrProvider?: ethers.Signer | ethers.Provider) {
-  const abi = loadABI("DebtToken");
   const sp = signerOrProvider || getProvider();
-  return new ethers.Contract(contractAddress, abi, sp);
+  return new ethers.Contract(contractAddress, DebtTokenABI, sp);
 }
 
 // ─── Wallet utilities ─────────────────────────────────────────────────────────

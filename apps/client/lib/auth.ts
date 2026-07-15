@@ -29,6 +29,7 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
             token.email = existingUser.email;
             token.onboardingComplete = (existingUser as any).onboardingComplete ?? false;
             token.username = (existingUser as any).username ?? null;
+            token.walletAddress = (existingUser as any).walletAddress ?? null;
             return token;
         },
 
@@ -37,6 +38,7 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
                 session.user.id = token.sub;
                 (session.user as any).onboardingComplete = token.onboardingComplete ?? false;
                 (session.user as any).username = token.username ?? null;
+                (session.user as any).walletAddress = token.walletAddress ?? null;
             }
 
             return session;

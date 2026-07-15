@@ -12,6 +12,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@repo/contracts": "workspace:*",
     "@repo/db": "workspace:*",
     "@repo/typescript-config": "workspace:*",
     "@types/cors": "^2.8.19",

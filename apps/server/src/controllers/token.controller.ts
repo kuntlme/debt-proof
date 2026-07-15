@@ -36,7 +36,7 @@ export const createToken = async (req: Request, res: Response) => {
       user.walletAddress,
       parsed.data.tokenName,
       parsed.data.symbol,
-      100
+      10000
     );
 
     // Save to DB
@@ -46,7 +46,7 @@ export const createToken = async (req: Request, res: Response) => {
         tokenName: parsed.data.tokenName,
         symbol: parsed.data.symbol,
         contractAddress,
-        totalSupply: 100,
+        totalSupply: 10000,
       },
     });
 
@@ -55,7 +55,7 @@ export const createToken = async (req: Request, res: Response) => {
       data: {
         tokenId: token.id,
         holderId: user.id,
-        balance: 100,
+        balance: 10000,
       },
     });
 

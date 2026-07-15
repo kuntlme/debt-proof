@@ -2,7 +2,14 @@ import { Request, Response } from "express";
 import prisma from "@repo/db";
 import { z } from "zod";
 import { ethers } from "ethers";
-import { createLoanOnChain } from "../services/loan.service";
+import {
+  createLoanOnChain,
+  activateLoanOnChain,
+  repayLoanOnChain,
+  defaultLoanOnChain,
+  cancelLoanOnChain,
+} from "../services/loan.service";
+import { getPrivateKeyForUser } from "../services/wallet.service";
 
 const createLoanSchema = z.object({
   lenderId: z.string().min(1),
@@ -154,6 +161,16 @@ export const repayLoan = async (req: Request, res: Response) => {
     if (loan.borrowerId !== borrower.id) return res.status(403).json({ success: false, message: "Only the borrower can repay" });
     if (loan.status !== "ACTIVE") return res.status(400).json({ success: false, message: "Loan is not active" });
 
+    // Call on-chain repayment (non-fatal)
+    if (loan.blockchainLoanId != null) {
+      try {
+        const borrowerKey = await getPrivateKeyForUser(borrower.id);
+        await repayLoanOnChain(loan.blockchainLoanId, borrowerKey);
+      } catch (e) {
+        console.warn("[repayLoan] on-chain call failed (non-fatal):", e);
+      }
+    }
+
     const updated = await prisma.loan.update({
       where: { id: loanId },
       data: { status: "REPAID", repaidAt: new Date() },
@@ -170,6 +187,41 @@ export const repayLoan = async (req: Request, res: Response) => {
   }
 };
 
+export const activateLoan = async (req: Request, res: Response) => {
+  try {
+    const { loanId } = req.params as any;
+    const lender = req.user!;
+    const loan = await prisma.loan.findUnique({ where: { id: loanId } });
+    if (!loan) return res.status(404).json({ success: false, message: "Loan not found" });
+    if (loan.lenderId !== lender.id) return res.status(403).json({ success: false, message: "Only the lender can activate" });
+    if (loan.status !== "REQUESTED") return res.status(400).json({ success: false, message: "Loan is not in REQUESTED state" });
+
+    // Call on-chain activation (non-fatal)
+    if (loan.blockchainLoanId != null) {
+      try {
+        const lenderKey = await getPrivateKeyForUser(lender.id);
+        await activateLoanOnChain(loan.blockchainLoanId, lenderKey);
+      } catch (e) {
+        console.warn("[activateLoan] on-chain call failed (non-fatal):", e);
+      }
+    }
+
+    const updated = await prisma.loan.update({
+      where: { id: loanId },
+      data: { status: "ACTIVE" },
+      include: {
+        borrower: { select: { id: true, name: true, email: true, walletAddress: true } },
+        lender: { select: { id: true, name: true, email: true, walletAddress: true } },
+        collateralToken: true,
+      },
+    });
+    return res.json({ success: true, loan: updated });
+  } catch (error) {
+    console.error("[activateLoan]", error);
+    return res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+};
+
 export const defaultLoan = async (req: Request, res: Response) => {
   try {
     const { loanId } = req.params as any;
@@ -178,6 +230,16 @@ export const defaultLoan = async (req: Request, res: Response) => {
     if (!loan) return res.status(404).json({ success: false, message: "Loan not found" });
     if (loan.lenderId !== lender.id) return res.status(403).json({ success: false, message: "Only the lender can default" });
     if (loan.status !== "ACTIVE") return res.status(400).json({ success: false, message: "Loan is not active" });
+
+    // Call on-chain default (non-fatal)
+    if (loan.blockchainLoanId != null) {
+      try {
+        const lenderKey = await getPrivateKeyForUser(lender.id);
+        await defaultLoanOnChain(loan.blockchainLoanId, lenderKey);
+      } catch (e) {
+        console.warn("[defaultLoan] on-chain call failed (non-fatal):", e);
+      }
+    }
 
     const updated = await prisma.loan.update({
       where: { id: loanId },
@@ -203,6 +265,16 @@ export const cancelLoan = async (req: Request, res: Response) => {
     if (!loan) return res.status(404).json({ success: false, message: "Loan not found" });
     if (loan.borrowerId !== borrower.id) return res.status(403).json({ success: false, message: "Only the borrower can cancel" });
     if (loan.status !== "REQUESTED") return res.status(400).json({ success: false, message: "Only REQUESTED loans can be cancelled" });
+
+    // Call on-chain cancel (non-fatal)
+    if (loan.blockchainLoanId != null) {
+      try {
+        const borrowerKey = await getPrivateKeyForUser(borrower.id);
+        await cancelLoanOnChain(loan.blockchainLoanId, borrowerKey);
+      } catch (e) {
+        console.warn("[cancelLoan] on-chain call failed (non-fatal):", e);
+      }
+    }
 
     const updated = await prisma.loan.update({ where: { id: loanId }, data: { status: "CANCELLED" } });
     return res.json({ success: true, loan: updated });

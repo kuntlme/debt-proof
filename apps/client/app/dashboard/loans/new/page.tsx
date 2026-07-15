@@ -1,10 +1,9 @@
 "use client";
 
-import { useSession } from "next-auth/react";
 import { useEffect, useState, useCallback, useRef } from "react";
 import {
-  Search, Globe, Users, ChevronRight, 
-  Loader2, X, ArrowRight, IndianRupee, Clock,
+  Search, Globe, Users, ChevronRight,
+  Loader2, X, ArrowRight, IndianRupee, Clock, Coins, AlertCircle,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -63,6 +62,27 @@ export default function NewLoanRequestPage() {
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── token gate ──────────────────────────────────────────────────────────────
+  const [tokenStatus, setTokenStatus] = useState<"loading" | "ok" | "missing">("loading");
+
+  useEffect(() => {
+    async function checkToken() {
+      try {
+        const jwt = await getJwt();
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/tokens/me`, {
+          headers: { Authorization: `Bearer ${jwt}` },
+        });
+        setTokenStatus(res.ok ? "ok" : "missing");
+      } catch {
+        setTokenStatus("missing");
+      }
+    }
+    checkToken();
+  }, []);
+  // ───────────────────────────────────────────────────────────────────────────
+
+
 
   const doSearch = useCallback(async (q: string) => {
     if (q.length < 2) { setResults([]); return; }
@@ -137,9 +157,46 @@ export default function NewLoanRequestPage() {
         </div>
       </div>
 
+      {/* ── Token gate banner ── */}
+      {tokenStatus === "loading" && (
+        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 flex items-center gap-3">
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground shrink-0" />
+          <p className="text-sm text-muted-foreground">Checking token status…</p>
+        </div>
+      )}
+
+      {tokenStatus === "missing" && (
+        <div className="rounded-2xl border border-yellow-500/25 bg-yellow-500/5 p-5 flex items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-yellow-500/10 shrink-0">
+              <AlertCircle className="h-4.5 w-4.5 text-yellow-400" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-yellow-300">Token required to request a loan</p>
+              <p className="text-xs text-yellow-400/70 mt-0.5 max-w-sm">
+                You need a personal token in your account before you can request a loan — it's used as on-chain collateral.
+              </p>
+            </div>
+          </div>
+          <Button
+            id="go-create-token"
+            size="sm"
+            onClick={() => router.push("/dashboard/token")}
+            className="rounded-xl bg-yellow-400 text-black font-semibold hover:bg-yellow-300 shrink-0 h-9 gap-1.5"
+          >
+            <Coins className="h-3.5 w-3.5" />
+            Create Token
+          </Button>
+        </div>
+      )}
+
+      {/* ── Form (dimmed when token missing) ── */}
+      <div className={cn(tokenStatus === "missing" ? "opacity-40 pointer-events-none select-none" : "")}>
+
       {/* STEP 1 */}
       {step === 1 && (
         <div className="space-y-5 animate-in fade-in duration-400">
+
           {/* Public toggle */}
           <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] p-4">
             <div className="flex items-center gap-3">
@@ -337,6 +394,7 @@ export default function NewLoanRequestPage() {
           </Button>
         </div>
       )}
+      </div>{/* end token-gate wrapper */}
     </div>
   );
 }

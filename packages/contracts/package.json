@@ -2,7 +2,18 @@
   "name": "@repo/contracts",
   "version": "1.0.0",
   "description": "DebtProof Solidity smart contracts",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/src/index.js",
+      "require": "./dist/src/index.js",
+      "default": "./dist/src/index.js",
+      "types": "./dist/src/index.d.ts"
+    }
+  },
   "scripts": {
+    "build": "tsc --project tsconfig.build.json",
     "compile": "hardhat compile",
     "test": "hardhat test",
     "deploy:local": "hardhat run scripts/deploy.ts --network localhost",
@@ -12,6 +23,7 @@
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@repo/typescript-config": "workspace:*",
     "@types/node": "^20.0.0",
     "hardhat": "^2.22.0",
     "ts-node": "^10.9.2",

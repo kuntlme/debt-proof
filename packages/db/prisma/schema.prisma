@@ -129,7 +129,8 @@ model Loan {
   collateralToken   PersonalToken @relation(fields: [collateralTokenId], references: [id])
   collateralAmount  Decimal       @db.Decimal(18, 4)
 
-  txHash String? @unique
+  blockchainLoanId Int?    @unique // on-chain loanId from LoanCreated event
+  txHash           String? @unique
 
   status LoanStatus
 

@@ -8,12 +8,12 @@ import {
 import { authMiddleware } from "../middleware/auth.middleware";
 const router: Router = Router();
 
-router.get("/me", getToken);
+router.get("/me", authMiddleware, getToken);
 // create token
 router.post("/create", authMiddleware, createToken);
 router.get("/:tokenId/holder", getTokenHolder);
-// show all tokes user currently holds
-router.get("/portfolio", getPortfolio);
+// show all tokens user currently holds
+router.get("/portfolio", authMiddleware, getPortfolio);
 
 export default router;
 

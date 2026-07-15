@@ -76,7 +76,7 @@ export default function LoanDetailPage() {
     load();
   }, [loanId]);
 
-  async function handleAction(action: "repay" | "default" | "cancel") {
+  async function handleAction(action: "repay" | "default" | "cancel" | "activate") {
     setActionLoading(action);
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/loans/${loanId}/${action}`, {
@@ -212,6 +212,25 @@ export default function LoanDetailPage() {
       </Card>
 
       {/* Actions */}
+      {loan.status === "REQUESTED" && isLender && (
+        <Card className="border-amber-500/20">
+          <CardContent className="p-4 space-y-3">
+            <p className="text-sm font-semibold">Lender Actions</p>
+            <Button
+              className="w-full rounded-xl bg-amber-500 text-black hover:bg-amber-400"
+              onClick={() => handleAction("activate")}
+              disabled={!!actionLoading}
+            >
+              {actionLoading === "activate" ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle className="h-4 w-4 mr-2" />}
+              Activate Loan (I've sent the funds)
+            </Button>
+            <p className="text-xs text-muted-foreground text-center">
+              Activating confirms you've transferred the fiat money to the borrower and locks their collateral.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {loan.status === "ACTIVE" && isBorrower && (
         <Card className="border-emerald-500/20">
           <CardContent className="p-4 space-y-3">

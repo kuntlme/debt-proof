@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import prisma from "@repo/db";
-import { generateWallet } from "../services/blockchain.service";
+import { generateWallet, getDeployer, ethers } from "../services/blockchain.service";
 import { deployDebtToken } from "../services/token.service";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
@@ -67,8 +67,22 @@ export const completeOnboarding = async (req: Request, res: Response) => {
     const encryptionPassword = process.env.WALLET_ENCRYPTION_SECRET || userId;
     const { address, encryptedJson, mnemonic, privateKey } = await generateWallet(encryptionPassword);
 
-    // 2. Encrypt seed phrase for storage (never returned again after this call)
-    const encryptedSeedPhrase = encryptSecret(mnemonic);
+    // 1b. Fund the new wallet with ETH for gas (non-fatal)
+    try {
+      const deployer = getDeployer();
+      const fundTx = await deployer.sendTransaction({
+        to: address,
+        value: ethers.parseEther("0.1"),
+      });
+      await fundTx.wait();
+      console.log(`[completeOnboarding] funded ${address} with 0.1 ETH`);
+    } catch (e) {
+      console.warn("[completeOnboarding] wallet funding failed (non-fatal):", e);
+    }
+
+    // 2. Store the encrypted JSON keystore (used by wallet.service to decrypt later)
+    //    We store encryptedJson directly — decryptWallet(encryptedJson, password) recovers the key
+    const encryptedSeedPhrase = encryptedJson;
 
     // 3. Deploy personal token (symbol derived from username, e.g. RAJ)
     const symbol = cleanUsername.slice(0, 4).toUpperCase();
@@ -77,12 +91,12 @@ export const completeOnboarding = async (req: Request, res: Response) => {
 
     if (!skipToken) {
       try {
-        const { contractAddress } = await deployDebtToken(address, tokenName, symbol, 100);
+        const { contractAddress } = await deployDebtToken(address, tokenName, symbol, 10000);
         const dbToken = await prisma.personalToken.create({
-          data: { ownerId: userId, tokenName, symbol, contractAddress, totalSupply: 100 },
+          data: { ownerId: userId, tokenName, symbol, contractAddress, totalSupply: 10000 },
         });
-        await prisma.tokenHolding.create({ data: { tokenId: dbToken.id, holderId: userId, balance: 100 } });
-        tokenData = { ...dbToken, totalSupply: 100 };
+        await prisma.tokenHolding.create({ data: { tokenId: dbToken.id, holderId: userId, balance: 10000 } });
+        tokenData = { ...dbToken, totalSupply: 10000 };
       } catch (e) {
         console.warn("[completeOnboarding] token deploy failed (non-fatal):", e);
       }

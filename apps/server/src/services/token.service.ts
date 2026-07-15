@@ -1,7 +1,6 @@
 import { ethers } from "ethers";
 import { getDeployer, getDebtTokenContract, parseEther, formatUnits, getProvider } from "./blockchain.service";
-import * as fs from "fs";
-import * as path from "path";
+import { DebtTokenArtifact } from "@repo/contracts";
 
 interface DeployTokenResult {
   contractAddress: string;
@@ -12,21 +11,10 @@ export async function deployDebtToken(
   ownerAddress: string,
   tokenName: string,
   symbol: string,
-  initialSupply: number = 100
+  initialSupply: number = 10000
 ): Promise<DeployTokenResult> {
   const deployer = getDeployer();
-
-  const artifactPath = path.join(
-    __dirname,
-    "../../../packages/contracts/artifacts/contracts/DebtToken.sol/DebtToken.json"
-  );
-
-  if (!fs.existsSync(artifactPath)) {
-    throw new Error("DebtToken artifact not found. Run: pnpm --filter @repo/contracts compile");
-  }
-
-  const artifact = JSON.parse(fs.readFileSync(artifactPath, "utf8"));
-  const factory = new ethers.ContractFactory(artifact.abi, artifact.bytecode, deployer);
+  const factory = new ethers.ContractFactory(DebtTokenArtifact.abi, DebtTokenArtifact.bytecode, deployer);
 
   const supplyInWei = parseEther(initialSupply.toString());
   const contract = await factory.deploy(tokenName, symbol, ownerAddress, supplyInWei);
