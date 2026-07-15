@@ -244,7 +244,7 @@ export default function LoanDetailPage() {
               Mark as Repaid
             </Button>
             <p className="text-xs text-muted-foreground text-center">
-              Confirming repayment will release your collateral tokens back to your wallet.
+              Confirming repayment will transfer {loan.amountINR} {loan.collateralToken?.symbol} to the lender and release your collateral.
             </p>
           </CardContent>
         </Card>

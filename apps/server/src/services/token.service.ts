@@ -58,14 +58,15 @@ export async function transferTokens(
   contractAddress: string,
   fromWalletPrivateKey: string,
   toAddress: string,
-  amount: string
+  amount: string,
+  nonce?: number
 ): Promise<string> {
   const provider = getProvider();
   const signer = new ethers.Wallet(fromWalletPrivateKey, provider);
   const token = getDebtTokenContract(contractAddress, signer) as any;
 
   const amountInWei = parseEther(amount);
-  const tx = await token.transfer(toAddress, amountInWei);
+  const tx = await token.transfer(toAddress, amountInWei, nonce !== undefined ? { nonce } : {});
   await tx.wait();
   return tx.hash;
 }

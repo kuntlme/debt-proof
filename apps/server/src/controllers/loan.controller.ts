@@ -10,6 +10,8 @@ import {
   cancelLoanOnChain,
 } from "../services/loan.service";
 import { getPrivateKeyForUser } from "../services/wallet.service";
+import { transferTokens } from "../services/token.service";
+import { getProvider } from "../services/blockchain.service";
 
 const createLoanSchema = z.object({
   lenderId: z.string().min(1),
@@ -53,6 +55,12 @@ export const createLoan = async (req: Request, res: Response) => {
     if (!holding || Number(holding.balance) < collateralAmount) {
       return res.status(400).json({ success: false, message: "Insufficient collateral token balance" });
     }
+
+    // Deduct collateral from borrower's holding
+    await prisma.tokenHolding.update({
+      where: { tokenId_holderId: { tokenId: collateralTokenId, holderId: borrower.id } },
+      data: { balance: { decrement: collateralAmount } },
+    });
 
     const loan = await prisma.loan.create({
       data: { borrowerId: borrower.id, lenderId, amountINR, collateralTokenId, collateralAmount, status: "REQUESTED" },
@@ -156,24 +164,95 @@ export const repayLoan = async (req: Request, res: Response) => {
   try {
     const { loanId } = req.params as any;
     const borrower = req.user!;
-    const loan = await prisma.loan.findUnique({ where: { id: loanId } });
+    const loan = await prisma.loan.findUnique({
+      where: { id: loanId },
+      include: {
+        collateralToken: true,
+      },
+    });
     if (!loan) return res.status(404).json({ success: false, message: "Loan not found" });
     if (loan.borrowerId !== borrower.id) return res.status(403).json({ success: false, message: "Only the borrower can repay" });
     if (loan.status !== "ACTIVE") return res.status(400).json({ success: false, message: "Loan is not active" });
 
+    // Verify borrower has enough token balance for the repayment transfer
+    const borrowerHolding = await prisma.tokenHolding.findUnique({
+      where: { tokenId_holderId: { tokenId: loan.collateralTokenId, holderId: loan.borrowerId } },
+    });
+    if (!borrowerHolding || Number(borrowerHolding.balance) < Number(loan.amountINR)) {
+      return res.status(400).json({ success: false, message: "Insufficient token balance to repay the loan" });
+    }
+
+    const lender = await prisma.user.findUnique({
+      where: { id: loan.lenderId },
+      select: { id: true, walletAddress: true },
+    });
+    if (!lender?.walletAddress) {
+      return res.status(400).json({ success: false, message: "Lender has no wallet address" });
+    }
+
+    let txHash: string | null = null;
     // Call on-chain repayment (non-fatal)
     if (loan.blockchainLoanId != null) {
       try {
         const borrowerKey = await getPrivateKeyForUser(borrower.id);
-        await repayLoanOnChain(loan.blockchainLoanId, borrowerKey);
+        const borrowerRecord = await prisma.user.findUnique({
+          where: { id: borrower.id },
+          select: { walletAddress: true }
+        });
+        
+        if (borrowerRecord?.walletAddress) {
+          const provider = getProvider();
+          const startNonce = await provider.getTransactionCount(borrowerRecord.walletAddress, "pending");
+
+          // 1. Transfer repayment amount (loan.amountINR) from borrower to lender on-chain
+          await transferTokens(
+            loan.collateralToken.contractAddress,
+            borrowerKey,
+            lender.walletAddress,
+            loan.amountINR.toString(),
+            startNonce
+          );
+
+          // 2. Repay loan on-chain (releases collateral back to borrower)
+          txHash = await repayLoanOnChain(loan.blockchainLoanId, borrowerKey, startNonce + 1);
+        } else {
+          throw new Error("Borrower has no wallet address");
+        }
       } catch (e) {
-        console.warn("[repayLoan] on-chain call failed (non-fatal):", e);
+        console.warn("[repayLoan] on-chain calls failed (non-fatal):", e);
       }
     }
 
+    // 1. Deduct repayment amount from borrower's holding in DB
+    await prisma.tokenHolding.update({
+      where: { tokenId_holderId: { tokenId: loan.collateralTokenId, holderId: loan.borrowerId } },
+      data: { balance: { decrement: loan.amountINR } },
+    });
+
+    // 2. Credit repayment amount to lender's holding in DB
+    await prisma.tokenHolding.upsert({
+      where: { tokenId_holderId: { tokenId: loan.collateralTokenId, holderId: loan.lenderId } },
+      update: { balance: { increment: loan.amountINR } },
+      create: {
+        tokenId: loan.collateralTokenId,
+        holderId: loan.lenderId,
+        balance: loan.amountINR,
+      },
+    });
+
+    // 3. Return collateral to borrower's holding in DB
+    await prisma.tokenHolding.update({
+      where: { tokenId_holderId: { tokenId: loan.collateralTokenId, holderId: loan.borrowerId } },
+      data: { balance: { increment: loan.collateralAmount } },
+    });
+
     const updated = await prisma.loan.update({
       where: { id: loanId },
-      data: { status: "REPAID", repaidAt: new Date() },
+      data: {
+        status: "REPAID",
+        repaidAt: new Date(),
+        ...(txHash ? { txHash } : {}),
+      },
       include: {
         borrower: { select: { id: true, name: true, email: true, walletAddress: true } },
         lender: { select: { id: true, name: true, email: true, walletAddress: true } },
@@ -241,6 +320,17 @@ export const defaultLoan = async (req: Request, res: Response) => {
       }
     }
 
+    // Transfer collateral to lender's holding
+    await prisma.tokenHolding.upsert({
+      where: { tokenId_holderId: { tokenId: loan.collateralTokenId, holderId: loan.lenderId } },
+      update: { balance: { increment: loan.collateralAmount } },
+      create: {
+        tokenId: loan.collateralTokenId,
+        holderId: loan.lenderId,
+        balance: loan.collateralAmount,
+      },
+    });
+
     const updated = await prisma.loan.update({
       where: { id: loanId },
       data: { status: "DEFAULTED" },
@@ -275,6 +365,12 @@ export const cancelLoan = async (req: Request, res: Response) => {
         console.warn("[cancelLoan] on-chain call failed (non-fatal):", e);
       }
     }
+
+    // Return collateral to borrower's holding
+    await prisma.tokenHolding.update({
+      where: { tokenId_holderId: { tokenId: loan.collateralTokenId, holderId: loan.borrowerId } },
+      data: { balance: { increment: loan.collateralAmount } },
+    });
 
     const updated = await prisma.loan.update({ where: { id: loanId }, data: { status: "CANCELLED" } });
     return res.json({ success: true, loan: updated });

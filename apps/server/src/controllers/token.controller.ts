@@ -50,7 +50,7 @@ export const createToken = async (req: Request, res: Response) => {
       },
     });
 
-    // Create initial holding record (owner holds all 100)
+    // Create initial holding record (owner holds all 10000)
     await prisma.tokenHolding.create({
       data: {
         tokenId: token.id,
@@ -59,7 +59,18 @@ export const createToken = async (req: Request, res: Response) => {
       },
     });
 
-    return res.status(201).json({ success: true, token, txHash });
+    const fullToken = await prisma.personalToken.findUnique({
+      where: { id: token.id },
+      include: {
+        tokenHoldings: {
+          include: {
+            holder: { select: { id: true, name: true, email: true, walletAddress: true } },
+          },
+        },
+      },
+    });
+
+    return res.status(201).json({ success: true, token: fullToken, txHash });
   } catch (error) {
     console.error("[createToken]", error);
     return res.status(500).json({ success: false, message: "Internal Server Error" });

@@ -250,8 +250,22 @@ export const acceptLoanRequest = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: "Borrower has not initialized a token (no collateral available)" });
     }
 
-    // Use 10 tokens as default collateral (10% of the 100 token supply)
-    const collateralAmount = 10;
+    // Use 1:1 ratio: collateral tokens equals the loan amount in INR
+    const collateralAmount = Number(request.amountINR);
+
+    // Verify borrower has sufficient database holding balance
+    const holding = await prisma.tokenHolding.findUnique({
+      where: { tokenId_holderId: { tokenId: borrowerToken.id, holderId: request.borrowerId } },
+    });
+    if (!holding || Number(holding.balance) < collateralAmount) {
+      return res.status(400).json({ success: false, message: "Borrower has insufficient collateral token balance" });
+    }
+
+    // Deduct collateral amount from borrower's holding
+    await prisma.tokenHolding.update({
+      where: { tokenId_holderId: { tokenId: borrowerToken.id, holderId: request.borrowerId } },
+      data: { balance: { decrement: collateralAmount } },
+    });
 
     // 1. Create the Loan DB record (status REQUESTED until on-chain confirmation)
     const loan = await prisma.loan.create({

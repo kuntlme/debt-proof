@@ -22,14 +22,20 @@ interface Holding {
 
 interface Token {
   id: string;
+  ownerId: string;
   tokenName: string;
   symbol: string;
   contractAddress: string;
   totalSupply: number;
-  tokenHoldings: Holding[];
+  tokenHoldings?: Holding[];
 }
 
 // ── helpers ────────────────────────────────────────────────────────────────────
+
+const COLORS = [
+  "#10b981", "#3b82f6", "#8b5cf6", "#f59e0b", "#ec4899",
+  "#14b8a6", "#f97316", "#6366f1", "#84cc16", "#06b6d4",
+];
 
 async function getJwt(): Promise<string> {
   try {
@@ -54,6 +60,7 @@ export default function TokenPage() {
   const router = useRouter();
 
   const [token, setToken] = useState<Token | null>(null);
+  const [portfolioHoldings, setPortfolioHoldings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
@@ -73,7 +80,14 @@ export default function TokenPage() {
           const data = await res.json();
           setToken(data.token ?? null);
         }
-        // any non-ok (404, 500, etc.) → show create form
+
+        const portfolioRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/tokens/portfolio`, {
+          headers: { Authorization: `Bearer ${jwt}` },
+        });
+        if (portfolioRes.ok) {
+          const data = await portfolioRes.json();
+          setPortfolioHoldings(data.holdings || []);
+        }
       } catch {
         toast.error("Could not reach server — check your connection");
       } finally {
@@ -82,6 +96,74 @@ export default function TokenPage() {
     }
     load();
   }, []);
+
+  const renderPortfolioSection = () => {
+    if (portfolioHoldings.length === 0) return null;
+
+    return (
+      <div className="rounded-2xl border border-white/10 bg-white/[0.02] overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
+          <div className="flex items-center gap-2">
+            <Coins className="h-4 w-4 text-muted-foreground" />
+            <p className="text-sm font-semibold text-white">Tokens You Hold</p>
+            <span className="text-xs text-muted-foreground bg-white/5 border border-white/10 rounded-full px-2 py-0.5">
+              {portfolioHoldings.length}
+            </span>
+          </div>
+        </div>
+
+        {/* Rows */}
+        <div className="divide-y divide-white/[0.05]">
+          {portfolioHoldings.map((h, i) => {
+            const isOwnToken = token && h.token.id === token.id;
+            const displayName = h.token.owner.name || h.token.owner.email;
+            const sym = h.token.symbol;
+            const balance = Number(h.balance);
+            const color = COLORS[i % COLORS.length];
+
+            return (
+              <div
+                key={h.id}
+                className="flex items-center gap-4 px-5 py-4 hover:bg-white/[0.02] transition-colors"
+              >
+                {/* Symbol icon */}
+                <div
+                  className="h-9 w-9 rounded-xl flex items-center justify-center text-xs font-bold shrink-0"
+                  style={{ background: `${color}22`, color: color }}
+                >
+                  {sym.slice(0, 2)}
+                </div>
+
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium text-white truncate">{h.token.tokenName}</p>
+                    {isOwnToken && (
+                      <span className="text-[9px] font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-1.5 py-0.5">
+                        My Token
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground/60 truncate">
+                    Owned by {displayName} • {shortAddr(h.token.contractAddress)}
+                  </p>
+                </div>
+
+                {/* Balance */}
+                <div className="text-right shrink-0">
+                  <p className="text-sm font-bold text-emerald-400 tabular-nums">
+                    {formatBalance(balance)}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">{sym}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
 
   async function handleCreate() {
     if (!tokenName || !symbol) { toast.error("Fill all fields"); return; }
@@ -214,6 +296,7 @@ export default function TokenPage() {
             )}
           </Button>
         </div>
+        {renderPortfolioSection()}
       </div>
     );
   }
@@ -221,8 +304,9 @@ export default function TokenPage() {
   // ── token exists — main view ────────────────────────────────────────────────
   if (!token) return null;
 
-  const ownBalance = token.tokenHoldings.find((h) => true)?.balance ?? token.totalSupply;
-  const otherHolders = token.tokenHoldings.filter((h, i) => i > 0); // non-owner holders
+  const holdings = token.tokenHoldings || [];
+  const ownBalance = holdings.find((h) => h.holder.id === token.ownerId)?.balance ?? token.totalSupply;
+  const otherHolders = holdings.filter((h) => h.holder.id !== token.ownerId); // non-owner holders
 
   return (
     <div className="max-w-2xl mx-auto p-6 lg:p-8 space-y-6">
@@ -342,20 +426,20 @@ export default function TokenPage() {
             <Wallet className="h-4 w-4 text-muted-foreground" />
             <p className="text-sm font-semibold text-white">Token Holders</p>
             <span className="text-xs text-muted-foreground bg-white/5 border border-white/10 rounded-full px-2 py-0.5">
-              {token.tokenHoldings.length}
+              {otherHolders.length}
             </span>
           </div>
           <TrendingUp className="h-4 w-4 text-emerald-400/50" />
         </div>
 
         {/* Rows */}
-        {!token.tokenHoldings.length ? (
+        {!otherHolders.length ? (
           <div className="px-5 py-10 text-center">
             <p className="text-sm text-muted-foreground">No holders yet</p>
           </div>
         ) : (
           <div className="divide-y divide-white/[0.05]">
-            {token.tokenHoldings.map((h, idx) => {
+            {otherHolders.map((h, idx) => {
               const displayName = h.holder.name || h.holder.email;
               const pct = ((Number(h.balance) / Number(token.totalSupply)) * 100).toFixed(1);
               return (
@@ -394,6 +478,8 @@ export default function TokenPage() {
           </div>
         )}
       </div>
+
+      {renderPortfolioSection()}
 
       {/* Quick-action CTA */}
       <button

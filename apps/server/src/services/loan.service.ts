@@ -23,9 +23,14 @@ export async function createLoanOnChain(params: CreateLoanOnChainParams): Promis
   const loanManagerAddress = await loanManager.getAddress();
 
   const collateralToken = getDebtTokenContract(params.collateralTokenAddress, borrower) as any;
+  
+  // Fetch pending transaction count to manage nonces manually for rapid successive transactions
+  const startNonce = await provider.getTransactionCount(borrower.address, "pending");
+
   const approveTx = await collateralToken.approve(
     loanManagerAddress,
-    BigInt(params.collateralAmountWei)
+    BigInt(params.collateralAmountWei),
+    { nonce: startNonce }
   );
   await approveTx.wait();
 
@@ -34,7 +39,8 @@ export async function createLoanOnChain(params: CreateLoanOnChainParams): Promis
     BigInt(params.amountINRPaise),
     params.collateralTokenAddress,
     BigInt(params.collateralAmountWei),
-    params.offchainId
+    params.offchainId,
+    { nonce: startNonce + 1 }
   );
 
   const receipt = await tx.wait();
@@ -58,11 +64,18 @@ export async function activateLoanOnChain(loanId: number, lenderPrivateKey: stri
   return tx.hash;
 }
 
-export async function repayLoanOnChain(loanId: number, borrowerPrivateKey: string): Promise<string> {
+export async function repayLoanOnChain(
+  loanId: number,
+  borrowerPrivateKey: string,
+  nonce?: number
+): Promise<string> {
   const provider = getProvider();
   const borrower = new ethers.Wallet(borrowerPrivateKey, provider);
   const loanManager = getLoanManagerContract(borrower) as any;
-  const tx = await loanManager.repayLoan(BigInt(loanId));
+  const tx = await loanManager.repayLoan(
+    BigInt(loanId),
+    nonce !== undefined ? { nonce } : {}
+  );
   await tx.wait();
   return tx.hash;
 }

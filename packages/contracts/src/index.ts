@@ -14,7 +14,7 @@ import * as path from "path";
 function loadArtifact(contractName: string): { abi: any[]; bytecode: string; contractName: string } {
   const p = path.join(
     __dirname,
-    "../artifacts/contracts",
+    "../../artifacts/contracts",
     `${contractName}.sol`,
     `${contractName}.json`
   );
@@ -55,7 +55,7 @@ export interface DeploymentInfo {
 }
 
 export function loadDeployment(networkName: string = "localhost"): DeploymentInfo | null {
-  const p = path.join(__dirname, "../deployments", `${networkName}.json`);
+  const p = path.join(__dirname, "../../deployments", `${networkName}.json`);
   if (!fs.existsSync(p)) return null;
   return JSON.parse(fs.readFileSync(p, "utf8")) as DeploymentInfo;
 }
