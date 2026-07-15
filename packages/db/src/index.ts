@@ -9,3 +9,5 @@ export { PrismaAdapter };
 export default prisma;
 // Export types for sharing
 export * from "../generated/prisma/client.js";
+
+export const __esModule = true;
