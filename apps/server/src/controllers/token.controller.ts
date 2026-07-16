@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import prisma from "@repo/db";
-import { createTokenSchema } from "../schemas/token.schema";
-import { deployDebtToken, getTokenBalance, getTokenInfo } from "../services/token.service";
+import { createTokenSchema } from "../schemas/token.schema.js";
+import { deployDebtToken, getTokenBalance, getTokenInfo } from "../services/token.service.js";
 
 /**
  * POST /tokens/create

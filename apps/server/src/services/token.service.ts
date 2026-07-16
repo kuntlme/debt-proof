@@ -1,5 +1,5 @@
 import { ethers } from "ethers";
-import { getDeployer, getDebtTokenContract, parseEther, formatUnits, getProvider } from "./blockchain.service";
+import { getDeployer, getDebtTokenContract, parseEther, formatUnits, getProvider } from "./blockchain.service.js";
 import { DebtTokenArtifact } from "@repo/contracts";
 
 interface DeployTokenResult {
@@ -71,4 +71,4 @@ export async function transferTokens(
   return tx.hash;
 }
 
-export { generateWallet } from "./blockchain.service";
+export { generateWallet } from "./blockchain.service.js";

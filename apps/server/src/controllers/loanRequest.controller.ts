@@ -2,8 +2,8 @@ import { Request, Response } from "express";
 import prisma from "@repo/db";
 import { z } from "zod";
 import { ethers } from "ethers";
-import { createLoanOnChain, activateLoanOnChain } from "../services/loan.service";
-import { getPrivateKeyForUser } from "../services/wallet.service";
+import { createLoanOnChain, activateLoanOnChain } from "../services/loan.service.js";
+import { getPrivateKeyForUser } from "../services/wallet.service.js";
 
 // ── Schemas ──────────────────────────────────────────────────────────────────
 

@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { createLoan, defaultLoan, getLoan, getLoans, repayLoan, cancelLoan, activateLoan } from "../controllers/loan.controller";
-import { authMiddleware } from "../middleware/auth.middleware";
+import { createLoan, defaultLoan, getLoan, getLoans, repayLoan, cancelLoan, activateLoan } from "../controllers/loan.controller.js";
+import { authMiddleware } from "../middleware/auth.middleware.js";
 
 const router: Router = Router();
 

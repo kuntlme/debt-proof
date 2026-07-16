@@ -1,11 +1,13 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../generated/prisma/client.js";
+import pg from "pg";
 import dotenv from "dotenv";
 
 dotenv.config();
 
 const globalForPrisma = globalThis as unknown as {
     prisma: PrismaClient | undefined;
+    pool: pg.Pool | undefined;
     adapter: PrismaPg | undefined;
 };
 
@@ -16,15 +18,22 @@ if (!databaseUrl) {
     );
 }
 
-// create adapter once
-export const adapter = globalForPrisma.adapter || new PrismaPg({ connectionString: databaseUrl });
+// Use a Pool (not a raw connectionString) so that concurrent Prisma queries
+// each get their own pg client — eliminates the pg@9 DeprecationWarning:
+// "Calling client.query() when the client is already executing a query"
+export const pool =
+    globalForPrisma.pool ||
+    new pg.Pool({ connectionString: databaseUrl });
 
-// create prismaClient with adapter
+export const adapter =
+    globalForPrisma.adapter || new PrismaPg(pool);
+
 export const prisma =
     globalForPrisma.prisma ||
     new PrismaClient({ adapter });
 
 if (process.env.NODE_ENV !== "production") {
+    globalForPrisma.pool = pool;
     globalForPrisma.prisma = prisma;
     globalForPrisma.adapter = adapter;
 }
