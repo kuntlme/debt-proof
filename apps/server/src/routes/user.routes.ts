@@ -7,8 +7,8 @@ import {
   getPublicProfile,
   searchUsers,
   issueToken,
-} from "../controllers/user.controller";
-import { authMiddleware } from "../middleware/auth.middleware";
+} from "../controllers/user.controller.js";
+import { authMiddleware } from "../middleware/auth.middleware.js";
 
 const router: Router = Router();
 

@@ -8,10 +8,10 @@ import {
   repayLoanOnChain,
   defaultLoanOnChain,
   cancelLoanOnChain,
-} from "../services/loan.service";
-import { getPrivateKeyForUser } from "../services/wallet.service";
-import { transferTokens } from "../services/token.service";
-import { getProvider } from "../services/blockchain.service";
+} from "../services/loan.service.js";
+import { getPrivateKeyForUser } from "../services/wallet.service.js";
+import { transferTokens } from "../services/token.service.js";
+import { getProvider } from "../services/blockchain.service.js";
 
 const createLoanSchema = z.object({
   lenderId: z.string().min(1),

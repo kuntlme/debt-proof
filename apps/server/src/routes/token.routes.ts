@@ -4,8 +4,8 @@ import {
   getPortfolio,
   getToken,
   getTokenHolder,
-} from "../controllers/token.controller";
-import { authMiddleware } from "../middleware/auth.middleware";
+} from "../controllers/token.controller.js";
+import { authMiddleware } from "../middleware/auth.middleware.js";
 const router: Router = Router();
 
 router.get("/me", authMiddleware, getToken);

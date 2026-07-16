@@ -1,5 +1,5 @@
 import prisma from "@repo/db";
-import { decryptWallet, getProvider } from "./blockchain.service";
+import { decryptWallet, getProvider } from "./blockchain.service.js";
 import crypto from "crypto";
 import { ethers } from "ethers";
 

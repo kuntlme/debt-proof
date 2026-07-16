@@ -8,8 +8,8 @@ import {
   acceptLoanRequest,
   declineLoanRequest,
   cancelLoanRequest,
-} from "../controllers/loanRequest.controller";
-import { authMiddleware } from "../middleware/auth.middleware";
+} from "../controllers/loanRequest.controller.js";
+import { authMiddleware } from "../middleware/auth.middleware.js";
 
 const router: Router = Router();
 

@@ -1,5 +1,5 @@
 import { ethers } from "ethers";
-import { getDeployer, getLoanManagerContract, getDebtTokenContract, getProvider } from "./blockchain.service";
+import { getDeployer, getLoanManagerContract, getDebtTokenContract, getProvider } from "./blockchain.service.js";
 
 export interface CreateLoanOnChainParams {
   lenderAddress: string;

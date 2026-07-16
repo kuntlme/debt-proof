@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import prisma from "@repo/db";
-import { generateWallet, getDeployer, ethers } from "../services/blockchain.service";
-import { deployDebtToken } from "../services/token.service";
+import { generateWallet, getDeployer, ethers } from "../services/blockchain.service.js";
+import { deployDebtToken } from "../services/token.service.js";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 

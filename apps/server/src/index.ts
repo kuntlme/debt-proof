@@ -1,10 +1,10 @@
 import express from "express";
 import cors from "cors";
-import userRoutes from './routes/user.routes';
-import tokenRoutes from './routes/token.routes';
-import loanRoutes from './routes/loan.routes';
-import transactionRoutes from './routes/transaction.routes';
-import loanRequestRoutes from './routes/loanRequest.routes';
+import userRoutes from "./routes/user.routes.js";
+import tokenRoutes from "./routes/token.routes.js";
+import loanRoutes from "./routes/loan.routes.js";
+import transactionRoutes from "./routes/transaction.routes.js";
+import loanRequestRoutes from "./routes/loanRequest.routes.js";
 
 const app = express();
 
