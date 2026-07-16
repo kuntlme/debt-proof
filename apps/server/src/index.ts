@@ -6,6 +6,7 @@ import loanRoutes from "./routes/loan.routes.js";
 import transactionRoutes from "./routes/transaction.routes.js";
 import loanRequestRoutes from "./routes/loanRequest.routes.js";
 import paymentRoutes from "./routes/payment.routes.js";
+import bankAccountRoutes from "./routes/bankAccount.routes.js";
 
 const app = express();
 
@@ -26,6 +27,7 @@ app.use('/tokens', tokenRoutes);
 app.use('/loans', loanRoutes);
 app.use('/transactions', transactionRoutes);
 app.use('/loan-requests', loanRequestRoutes);
+app.use('/bank-accounts', bankAccountRoutes);
 
 app.get("/health", (_req, res) => {
   return res.json({ health: "good", timestamp: new Date().toISOString() });

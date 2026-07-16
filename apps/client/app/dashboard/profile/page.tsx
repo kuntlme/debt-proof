@@ -4,7 +4,8 @@ import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 import {
   Copy, ExternalLink, User, Mail, Calendar, ShieldCheck, Loader2,
-  ArrowDownLeft, ArrowUpRight, Clock, TrendingUp, CheckCircle, AlertTriangle,
+  ArrowDownLeft, ArrowUpRight, Clock, AlertTriangle, Building2,
+  CheckCircle2, PlusCircle, Banknote,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,8 +13,217 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+
+// ── Bank Account Types ────────────────────────────────────────────────────────
+interface BankAccount {
+  id: string;
+  accountHolderName: string;
+  accountNumber: string;
+  ifscCode: string;
+  bankName: string;
+  upiId?: string;
+  isVerified: boolean;
+}
+
+// ── Bank Account Form Component ───────────────────────────────────────────────
+function BankAccountSection() {
+  const [bankAccount, setBankAccount] = useState<BankAccount | null>(null);
+  const [hasLinkedAccount, setHasLinkedAccount] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+
+  const [form, setForm] = useState({
+    accountHolderName: "",
+    accountNumber: "",
+    ifscCode: "",
+    bankName: "",
+    upiId: "",
+  });
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const jwt = await getJwt();
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/bank-accounts/me`,
+          { headers: { Authorization: `Bearer ${jwt}` } }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setBankAccount(data.bankAccount);
+          setHasLinkedAccount(data.hasLinkedAccount);
+          if (data.bankAccount) {
+            setForm({
+              accountHolderName: data.bankAccount.accountHolderName,
+              accountNumber: data.bankAccount.accountNumber,
+              ifscCode: data.bankAccount.ifscCode,
+              bankName: data.bankAccount.bankName,
+              upiId: data.bankAccount.upiId || "",
+            });
+          }
+        }
+      } catch { /* silent */ }
+      finally { setLoading(false); }
+    }
+    load();
+  }, []);
+
+  async function handleSave() {
+    if (!form.accountHolderName || !form.accountNumber || !form.ifscCode || !form.bankName) {
+      toast.error("Please fill all required fields");
+      return;
+    }
+    setSaving(true);
+    try {
+      const jwt = await getJwt();
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/bank-accounts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${jwt}` },
+        body: JSON.stringify(form),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        toast.success(data.message || "Bank account saved!");
+        setBankAccount(data.bankAccount);
+        setHasLinkedAccount(!!data.razorpayAccountId);
+        setShowForm(false);
+      } else {
+        toast.error(data.message || "Failed to save bank account");
+      }
+    } catch {
+      toast.error("Something went wrong");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) return <Skeleton className="h-32 w-full rounded-xl" />;
+
+  return (
+    <Card className="border-border/60">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Banknote className="h-4 w-4 text-blue-400" />
+          Bank Account (For Loan Disbursement)
+          {hasLinkedAccount && (
+            <Badge className="ml-auto bg-emerald-500/15 text-emerald-400 border-emerald-500/20 text-xs">
+              <CheckCircle2 className="h-3 w-3 mr-1" />Linked
+            </Badge>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Info banner */}
+        <div className="rounded-xl bg-blue-500/5 border border-blue-500/20 p-3 text-xs text-blue-300">
+          <strong>Why is this needed?</strong> When a lender pays you via Razorpay, the money is
+          automatically routed to this bank account using <strong>Razorpay Route</strong> — so you
+          receive the loan amount directly in your bank/UPI.
+        </div>
+
+        {bankAccount && !showForm ? (
+          <div className="space-y-3">
+            <div className="rounded-xl bg-accent/50 p-4 space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Account Holder</span>
+                <span className="font-semibold">{bankAccount.accountHolderName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Bank</span>
+                <span className="font-semibold">{bankAccount.bankName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Account No.</span>
+                <span className="font-mono font-semibold">
+                  {"•".repeat(bankAccount.accountNumber.length - 4) + bankAccount.accountNumber.slice(-4)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">IFSC</span>
+                <span className="font-mono font-semibold">{bankAccount.ifscCode}</span>
+              </div>
+              {bankAccount.upiId && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">UPI ID</span>
+                  <span className="font-semibold">{bankAccount.upiId}</span>
+                </div>
+              )}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full rounded-xl"
+              onClick={() => setShowForm(true)}
+            >
+              Update Bank Details
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {!bankAccount && !showForm && (
+              <div className="text-center py-4">
+                <Building2 className="h-10 w-10 text-muted-foreground/30 mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground">No bank account added yet.</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Add your bank details so lenders can pay you directly.
+                </p>
+                <Button
+                  className="mt-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white gap-2"
+                  onClick={() => setShowForm(true)}
+                >
+                  <PlusCircle className="h-4 w-4" /> Add Bank Account
+                </Button>
+              </div>
+            )}
+
+            {showForm && (
+              <div className="space-y-3">
+                {[
+                  { key: "accountHolderName", label: "Account Holder Name *", placeholder: "As per bank records" },
+                  { key: "accountNumber", label: "Account Number *", placeholder: "Enter account number" },
+                  { key: "ifscCode", label: "IFSC Code *", placeholder: "e.g. SBIN0001234" },
+                  { key: "bankName", label: "Bank Name *", placeholder: "e.g. State Bank of India" },
+                  { key: "upiId", label: "UPI ID (optional)", placeholder: "e.g. name@upi" },
+                ].map(({ key, label, placeholder }) => (
+                  <div key={key} className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wider">{label}</Label>
+                    <Input
+                      value={(form as any)[key]}
+                      onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+                      placeholder={placeholder}
+                      className="rounded-xl bg-accent/30 border-border/60"
+                    />
+                  </div>
+                ))}
+                <div className="flex gap-2 pt-1">
+                  <Button
+                    variant="outline"
+                    className="flex-1 rounded-xl"
+                    onClick={() => setShowForm(false)}
+                    disabled={saving}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    className="flex-1 rounded-xl bg-blue-600 hover:bg-blue-500 text-white"
+                    onClick={handleSave}
+                    disabled={saving}
+                  >
+                    {saving ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Saving…</> : "Save Account"}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 interface UserProfile {
   id: string;
@@ -292,6 +502,9 @@ export default function ProfilePage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Bank Account for Razorpay Route payouts */}
+      <BankAccountSection />
 
       {/* Recent Activity */}
       <Card className="border-border/60">

@@ -53,6 +53,25 @@ export interface RazorpayRefund {
 
 // ── Input Option Types ────────────────────────────────────────────────────────
 
+// ── Razorpay Route (Transfer) Types ──────────────────────────────────────────
+
+/**
+ * A single transfer entry for Razorpay Route.
+ * Specifies a linked account that will receive a portion of the payment.
+ */
+export interface RazorpayTransfer {
+  /** Razorpay Linked Account ID (e.g. "acc_xxxxxxxxxx") */
+  account: string;
+  /** Amount to transfer in paise (100 paise = 1 INR) */
+  amount: number;
+  /** Currency code, usually "INR" */
+  currency: string;
+  /** Optional notes for the transfer */
+  notes?: Record<string, string>;
+  /** Whether to put funds on hold before settling to linked account */
+  on_hold?: 0 | 1;
+}
+
 export interface CreateOrderOptions {
   /** Loan repayment amount in Indian Rupees (INR) */
   amountINR: number;
@@ -62,6 +81,12 @@ export interface CreateOrderOptions {
   notes?: Record<string, string>;
   /** ISO 4217 currency code. Defaults to "INR" */
   currency?: string;
+  /**
+   * Razorpay Route transfers — routes payment directly to borrower's
+   * linked account (sub-merchant) after the order is paid.
+   * Each entry specifies an account and the amount to transfer (in paise).
+   */
+  transfers?: RazorpayTransfer[];
 }
 
 export interface VerifyPaymentOptions {

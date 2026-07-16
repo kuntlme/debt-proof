@@ -77,7 +77,22 @@ export const createOrder = async (req: Request, res: Response) => {
     const loan = await prisma.loan.findUnique({
       where: { id: loanId },
       include: {
-        borrower: { select: { id: true, name: true, email: true } },
+        borrower: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            razorpayAccountId: true,
+            bankAccount: {
+              select: {
+                accountHolderName: true,
+                bankName: true,
+                upiId: true,
+                isVerified: true,
+              },
+            },
+          },
+        },
         lender: { select: { id: true, name: true, email: true } },
         collateralToken: { select: { tokenName: true, symbol: true } },
       },
@@ -93,15 +108,45 @@ export const createOrder = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: `Loan is already ${loan.status}` });
     }
 
+    const amountINR = Number(loan.amountINR);
+    const amountPaise = Math.round(amountINR * 100);
+
+    // ── Build Razorpay Route transfer (if borrower has a linked account) ──────
+    // This routes the loan amount directly to the borrower's bank account.
+    const borrowerAccountId = loan.borrower.razorpayAccountId;
+    const transfers = borrowerAccountId
+      ? [
+          {
+            account: borrowerAccountId,
+            amount: amountPaise,          // full loan amount goes to borrower
+            currency: "INR",
+            notes: {
+              loanId,
+              purpose: "P2P loan disbursement",
+              borrowerEmail: loan.borrower.email ?? "",
+            },
+          },
+        ]
+      : undefined;
+
+    if (!borrowerAccountId) {
+      console.warn(
+        `[payment/createOrder] Borrower ${loan.borrower.id} has no razorpayAccountId — ` +
+        `payment will go to merchant account (borrower must add bank details).`
+      );
+    }
+
     const order = await rzpCreateOrder({
-      amountINR: Number(loan.amountINR),
+      amountINR,
       receipt: loanId,
+      transfers,
       notes: {
         loanId,
         lenderId: lender.id,
         borrowerId: loan.borrowerId,
         borrowerName: (loan.borrower.name || loan.borrower.email) as string,
         collateralToken: loan.collateralToken.symbol,
+        transferMode: borrowerAccountId ? "razorpay_route" : "merchant_account",
       } as Record<string, string>,
     });
 
@@ -114,6 +159,15 @@ export const createOrder = async (req: Request, res: Response) => {
       },
       loan,
       keyId: process.env["RAZORPAY_KEY_ID"],
+      // Let the UI know whether the borrower has bank details set up
+      hasBankAccount: !!borrowerAccountId,
+      borrowerBankInfo: loan.borrower.bankAccount
+        ? {
+            bankName: loan.borrower.bankAccount.bankName,
+            accountHolderName: loan.borrower.bankAccount.accountHolderName,
+            isVerified: loan.borrower.bankAccount.isVerified,
+          }
+        : null,
     });
   } catch (error) {
     console.error("[payment/createOrder]", error);
