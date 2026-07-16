@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft, ExternalLink, Copy, CheckCircle, AlertTriangle,
-  Clock, TrendingUp, ShieldCheck, Loader2,
+  Clock, TrendingUp, ShieldCheck, Loader2, CreditCard,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -213,19 +213,20 @@ export default function LoanDetailPage() {
 
       {/* Actions */}
       {loan.status === "REQUESTED" && isLender && (
-        <Card className="border-amber-500/20">
+        <Card className="border-amber-500/20 overflow-hidden">
+          <div className="h-0.5 w-full bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-500" />
           <CardContent className="p-4 space-y-3">
             <p className="text-sm font-semibold">Lender Actions</p>
             <Button
-              className="w-full rounded-xl bg-amber-500 text-black hover:bg-amber-400"
-              onClick={() => handleAction("activate")}
-              disabled={!!actionLoading}
+              id="activate-loan-btn"
+              className="w-full rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-black font-bold hover:from-emerald-400 hover:to-teal-400 shadow-md shadow-emerald-500/20"
+              onClick={() => router.push(`/dashboard/loans/${loanId}/checkout`)}
             >
-              {actionLoading === "activate" ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle className="h-4 w-4 mr-2" />}
-              Activate Loan (I've sent the funds)
+              <CreditCard className="h-4 w-4 mr-2" />
+              Proceed to Pay — Activate Loan
             </Button>
             <p className="text-xs text-muted-foreground text-center">
-              Activating confirms you've transferred the fiat money to the borrower and locks their collateral.
+              You'll be redirected to a secure Razorpay checkout. On payment, the loan activates and tokens transfer automatically.
             </p>
           </CardContent>
         </Card>
