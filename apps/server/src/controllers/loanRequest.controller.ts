@@ -281,17 +281,16 @@ export const acceptLoanRequest = async (req: Request, res: Response) => {
     });
 
     // 2. Mark request + lenderRow accepted in DB
-    await prisma.$transaction([
-      prisma.loanRequest.update({ where: { id }, data: { status: "ACCEPTED", loanId: loan.id } }),
-      ...(request.type === "TARGETED"
-        ? [
-            prisma.loanRequestLender.updateMany({
-              where: { loanRequestId: id, lenderId: lender.id },
-              data: { status: "ACCEPTED" },
-            }),
-          ]
-        : []),
-    ]);
+    // NOTE: sequential awaits instead of prisma.$transaction([array]) — the array
+    // form pins a single pg.Client for all queries which triggers the pg@9
+    // DeprecationWarning about concurrent client.query() calls.
+    await prisma.loanRequest.update({ where: { id }, data: { status: "ACCEPTED", loanId: loan.id } });
+    if (request.type === "TARGETED") {
+      await prisma.loanRequestLender.updateMany({
+        where: { loanRequestId: id, lenderId: lender.id },
+        data: { status: "ACCEPTED" },
+      });
+    }
 
     // 3. Attempt on-chain creation (non-fatal — loan stays in DB even if blockchain is down)
     let blockchainLoanId: number | null = null;

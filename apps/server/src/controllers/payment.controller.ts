@@ -111,13 +111,45 @@ export const createOrder = async (req: Request, res: Response) => {
     const amountINR = Number(loan.amountINR);
     const amountPaise = Math.round(amountINR * 100);
 
-    // ── Build Razorpay Route transfer (if borrower has a linked account) ──────
-    // This routes the loan amount directly to the borrower's bank account.
+    // ── Build Razorpay Route transfer (if borrower has a real linked account) ──
+    // A real Razorpay Route account ID always starts with "acc_".
+    // Placeholder IDs ("bank_account_only:...") mean bank details exist in DB
+    // but the Route API failed (e.g. test mode) — skip Route transfer in that case.
     const borrowerAccountId = loan.borrower.razorpayAccountId;
-    const transfers = borrowerAccountId
+    const hasBorrowerBankDetails = !!loan.borrower.bankAccount; // true if bank record exists in DB
+    const isRealRouteAccount = !!borrowerAccountId && borrowerAccountId.startsWith("acc_");
+
+    // ── Guard: borrower must have bank details before payment can be initiated ──
+    // Without bank details there is no way to route the loan amount to the borrower,
+    // so we refuse the request rather than silently settling into the merchant account.
+    if (!hasBorrowerBankDetails) {
+      console.warn(
+        `[payment/createOrder] Borrower ${loan.borrower.id} has no bank account on file — ` +
+        `blocking order creation.`
+      );
+      return res.status(400).json({
+        success: false,
+        message:
+          "The borrower has not added a bank account yet. " +
+          "Ask them to go to Profile → Bank Account and save their details before you pay.",
+        code: "BORROWER_NO_BANK_ACCOUNT",
+      });
+    }
+
+    if (!isRealRouteAccount) {
+      // Bank details exist but no live Razorpay Route account (common in test mode).
+      // Log info only — payment proceeds and settles to the merchant account.
+      console.info(
+        `[payment/createOrder] Borrower ${loan.borrower.id} has bank details saved but no live ` +
+        `Razorpay Route account (id="${borrowerAccountId}"). ` +
+        `Payment goes to merchant account; bank details are on record.`
+      );
+    }
+
+    const transfers = isRealRouteAccount
       ? [
           {
-            account: borrowerAccountId,
+            account: borrowerAccountId!,
             amount: amountPaise,          // full loan amount goes to borrower
             currency: "INR",
             notes: {
@@ -129,13 +161,6 @@ export const createOrder = async (req: Request, res: Response) => {
         ]
       : undefined;
 
-    if (!borrowerAccountId) {
-      console.warn(
-        `[payment/createOrder] Borrower ${loan.borrower.id} has no razorpayAccountId — ` +
-        `payment will go to merchant account (borrower must add bank details).`
-      );
-    }
-
     const order = await rzpCreateOrder({
       amountINR,
       receipt: loanId,
@@ -146,7 +171,7 @@ export const createOrder = async (req: Request, res: Response) => {
         borrowerId: loan.borrowerId,
         borrowerName: (loan.borrower.name || loan.borrower.email) as string,
         collateralToken: loan.collateralToken.symbol,
-        transferMode: borrowerAccountId ? "razorpay_route" : "merchant_account",
+        transferMode: isRealRouteAccount ? "razorpay_route" : "bank_on_file_no_route",
       } as Record<string, string>,
     });
 
@@ -159,8 +184,8 @@ export const createOrder = async (req: Request, res: Response) => {
       },
       loan,
       keyId: process.env["RAZORPAY_KEY_ID"],
-      // Let the UI know whether the borrower has bank details set up
-      hasBankAccount: !!borrowerAccountId,
+      // hasBankAccount = true if borrower has bank details saved in DB (regardless of Route status)
+      hasBankAccount: hasBorrowerBankDetails,
       borrowerBankInfo: loan.borrower.bankAccount
         ? {
             bankName: loan.borrower.bankAccount.bankName,
