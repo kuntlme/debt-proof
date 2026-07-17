@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import {
   Copy, ExternalLink, User, Mail, Calendar, ShieldCheck, Loader2,
   ArrowDownLeft, ArrowUpRight, Clock, AlertTriangle, Building2,
-  CheckCircle2, PlusCircle, Banknote,
+  CheckCircle2, PlusCircle, Banknote, TrendingUp, TrendingDown, Activity,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -294,14 +294,21 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [initializingWallet, setInitializingWallet] = useState(false);
   const [loans, setLoans] = useState<Loan[]>([]);
+  const [creditData, setCreditData] = useState<{
+    creditScore: number;
+    tier: { label: string; color: string; canBorrow: boolean };
+    breakdown: { repaid: number; defaulted: number; active: number; cancelled: number };
+    limits: { minRequired: number; min: number; max: number; canBorrow: boolean };
+  } | null>(null);
 
   useEffect(() => {
     async function load() {
       try {
         const jwt = await getJwt();
-        const [profileRes, loansRes] = await Promise.all([
+        const [profileRes, loansRes, creditRes] = await Promise.all([
           fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/me`, { headers: { Authorization: `Bearer ${jwt}` } }),
           fetch(`${process.env.NEXT_PUBLIC_API_URL}/loans`, { headers: { Authorization: `Bearer ${jwt}` } }),
+          fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/me/credit-score`, { headers: { Authorization: `Bearer ${jwt}` } }),
         ]);
         if (profileRes.ok) {
           const data = await profileRes.json();
@@ -310,6 +317,10 @@ export default function ProfilePage() {
         if (loansRes.ok) {
           const data = await loansRes.json();
           setLoans(data.loans || []);
+        }
+        if (creditRes.ok) {
+          const data = await creditRes.json();
+          setCreditData(data);
         }
       } catch {
         toast.error("Failed to load profile");
@@ -409,8 +420,96 @@ export default function ProfilePage() {
               </div>
             </div>
           ))}
-          {/* Credit score */}
-          {user?.creditScore !== undefined && (
+          {/* Credit score — use live recalculated data */}
+          {creditData ? (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between rounded-xl bg-accent/50 px-4 py-3">
+                <div>
+                  <p className="text-xs text-muted-foreground">Credit Score</p>
+                  <p className={cn(
+                    "text-2xl font-bold",
+                    creditData.creditScore >= 700 ? "text-emerald-400" :
+                    creditData.creditScore >= 550 ? "text-yellow-400" :
+                    creditData.creditScore >= 400 ? "text-orange-400" : "text-red-400"
+                  )}>
+                    {creditData.creditScore}
+                    <span className="text-sm text-muted-foreground font-normal ml-1">/ 850</span>
+                  </p>
+                </div>
+                <div className="text-right">
+                  <Badge variant="outline" className={cn(
+                    "text-xs mb-1",
+                    creditData.creditScore >= 750 ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/20" :
+                    creditData.creditScore >= 650 ? "bg-green-500/15 text-green-400 border-green-500/20" :
+                    creditData.creditScore >= 550 ? "bg-yellow-500/15 text-yellow-400 border-yellow-500/20" :
+                    creditData.creditScore >= 400 ? "bg-orange-500/15 text-orange-400 border-orange-500/20" :
+                    "bg-red-500/15 text-red-400 border-red-500/20"
+                  )}>
+                    {creditData.tier.label}
+                  </Badge>
+                  {!creditData.limits.canBorrow && (
+                    <p className="text-[10px] text-red-400 mt-0.5">Cannot Borrow</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Score progress bar */}
+              <div className="px-1">
+                <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
+                  <span>300</span><span>Minimum: {creditData.limits.minRequired}</span><span>850</span>
+                </div>
+                <div className="relative h-2 w-full rounded-full bg-accent overflow-hidden">
+                  {/* Minimum borrow threshold marker */}
+                  <div
+                    className="absolute top-0 bottom-0 w-0.5 bg-orange-400/60 z-10"
+                    style={{ left: `${((creditData.limits.minRequired - 300) / 550) * 100}%` }}
+                  />
+                  {/* Score fill */}
+                  <div
+                    className={cn(
+                      "h-full rounded-full transition-all duration-700",
+                      creditData.creditScore >= 700 ? "bg-emerald-400" :
+                      creditData.creditScore >= 550 ? "bg-yellow-400" :
+                      creditData.creditScore >= 400 ? "bg-orange-400" : "bg-red-400"
+                    )}
+                    style={{ width: `${Math.max(2, ((creditData.creditScore - 300) / 550) * 100)}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Breakdown */}
+              <div className="grid grid-cols-4 gap-2 text-center">
+                <div className="rounded-lg bg-emerald-500/10 p-2">
+                  <p className="text-sm font-bold text-emerald-400">{creditData.breakdown.repaid}</p>
+                  <p className="text-[10px] text-muted-foreground">Repaid</p>
+                </div>
+                <div className="rounded-lg bg-blue-500/10 p-2">
+                  <p className="text-sm font-bold text-blue-400">{creditData.breakdown.active}</p>
+                  <p className="text-[10px] text-muted-foreground">Active</p>
+                </div>
+                <div className="rounded-lg bg-red-500/10 p-2">
+                  <p className="text-sm font-bold text-red-400">{creditData.breakdown.defaulted}</p>
+                  <p className="text-[10px] text-muted-foreground">Defaulted</p>
+                </div>
+                <div className="rounded-lg bg-muted/50 p-2">
+                  <p className="text-sm font-bold text-muted-foreground">{creditData.breakdown.cancelled}</p>
+                  <p className="text-[10px] text-muted-foreground">Cancelled</p>
+                </div>
+              </div>
+
+              {/* Cannot-borrow warning */}
+              {!creditData.limits.canBorrow && (
+                <div className="flex items-start gap-2 rounded-xl bg-red-500/10 border border-red-500/20 p-3 text-xs text-red-300">
+                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-red-400" />
+                  <span>
+                    Your credit score is <strong>below {creditData.limits.minRequired}</strong>. You cannot borrow money
+                    and lenders cannot accept your loan requests until your score improves.
+                    Repay existing loans on time to recover your score.
+                  </span>
+                </div>
+              )}
+            </div>
+          ) : user?.creditScore !== undefined ? (
             <div className="flex items-center justify-between rounded-xl bg-accent/50 px-4 py-3">
               <div>
                 <p className="text-xs text-muted-foreground">Credit Score</p>
@@ -418,11 +517,8 @@ export default function ProfilePage() {
                   {user.creditScore}
                 </p>
               </div>
-              <Badge variant="outline" className={cn("text-xs", user.creditScore >= 700 ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/20" : user.creditScore >= 500 ? "bg-yellow-500/15 text-yellow-400 border-yellow-500/20" : "bg-red-500/15 text-red-400 border-red-500/20")}>
-                {user.creditScore >= 700 ? "Low Risk" : user.creditScore >= 500 ? "Medium Risk" : "High Risk"}
-              </Badge>
             </div>
-          )}
+          ) : null}
         </CardContent>
       </Card>
 

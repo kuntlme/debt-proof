@@ -12,6 +12,7 @@ import {
 import { getPrivateKeyForUser } from "../services/wallet.service.js";
 import { transferTokens } from "../services/token.service.js";
 import { getProvider } from "../services/blockchain.service.js";
+import { recalculateCreditScore, MIN_BORROW_CREDIT_SCORE } from "../services/creditScore.service.js";
 
 const createLoanSchema = z.object({
   lenderId: z.string().min(1),
@@ -34,6 +35,21 @@ export const createLoan = async (req: Request, res: Response) => {
     }
     if (!borrower.walletAddress) {
       return res.status(400).json({ success: false, message: "Borrower wallet not initialized" });
+    }
+
+    // ── Credit score gate: borrower must meet minimum score to take a loan ──
+    const borrowerRecord = await prisma.user.findUnique({
+      where: { id: borrower.id },
+      select: { creditScore: true },
+    });
+    if ((borrowerRecord?.creditScore ?? 500) < MIN_BORROW_CREDIT_SCORE) {
+      return res.status(403).json({
+        success: false,
+        message: `Your credit score (${borrowerRecord?.creditScore}) is too low to borrow. Minimum required: ${MIN_BORROW_CREDIT_SCORE}.`,
+        code: "CREDIT_SCORE_TOO_LOW",
+        creditScore: borrowerRecord?.creditScore,
+        minRequired: MIN_BORROW_CREDIT_SCORE,
+      });
     }
 
     const lender = await prisma.user.findUnique({
@@ -259,7 +275,11 @@ export const repayLoan = async (req: Request, res: Response) => {
         collateralToken: true,
       },
     });
-    return res.json({ success: true, loan: updated });
+
+    // Recalculate borrower's credit score after successful repayment
+    const newScore = await recalculateCreditScore(loan.borrowerId);
+
+    return res.json({ success: true, loan: updated, newCreditScore: newScore });
   } catch (error) {
     console.error("[repayLoan]", error);
     return res.status(500).json({ success: false, message: "Internal Server Error" });
@@ -340,7 +360,11 @@ export const defaultLoan = async (req: Request, res: Response) => {
         collateralToken: true,
       },
     });
-    return res.json({ success: true, loan: updated });
+
+    // Recalculate borrower's credit score after default (heavy penalty)
+    const newScore = await recalculateCreditScore(loan.borrowerId);
+
+    return res.json({ success: true, loan: updated, newCreditScore: newScore });
   } catch (error) {
     console.error("[defaultLoan]", error);
     return res.status(500).json({ success: false, message: "Internal Server Error" });
@@ -373,7 +397,11 @@ export const cancelLoan = async (req: Request, res: Response) => {
     });
 
     const updated = await prisma.loan.update({ where: { id: loanId }, data: { status: "CANCELLED" } });
-    return res.json({ success: true, loan: updated });
+
+    // Recalculate borrower's credit score after cancellation
+    const newScore = await recalculateCreditScore(borrower.id);
+
+    return res.json({ success: true, loan: updated, newCreditScore: newScore });
   } catch (error) {
     console.error("[cancelLoan]", error);
     return res.status(500).json({ success: false, message: "Internal Server Error" });

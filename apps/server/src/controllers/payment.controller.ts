@@ -6,6 +6,7 @@ import {
   verifyWebhookSignature,
   parseWebhookEvent,
 } from "@repo/payment";
+import { recalculateCreditScore } from "../services/creditScore.service.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -54,6 +55,13 @@ async function activateAndTransfer(loanId: string, razorpayPaymentId?: string) {
       collateralToken: true,
     },
   });
+
+  // Recalculate credit score — active loan slightly reduces the borrower's score
+  try {
+    await recalculateCreditScore(updated.borrower.id);
+  } catch (e) {
+    console.warn("[activateAndTransfer] credit score recalculation failed (non-fatal):", e);
+  }
 
   return updated;
 }

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { ethers } from "ethers";
 import { createLoanOnChain, activateLoanOnChain } from "../services/loan.service.js";
 import { getPrivateKeyForUser } from "../services/wallet.service.js";
+import { recalculateCreditScore, MIN_BORROW_CREDIT_SCORE } from "../services/creditScore.service.js";
 
 // ── Schemas ──────────────────────────────────────────────────────────────────
 
@@ -38,6 +39,22 @@ export const createLoanRequest = async (req: Request, res: Response) => {
       if (lenderIds.includes(borrower.id)) {
         return res.status(400).json({ success: false, message: "Cannot request a loan from yourself" });
       }
+    }
+
+    // ── Credit score gate ──
+    const borrowerFull = await prisma.user.findUnique({
+      where: { id: borrower.id },
+      select: { creditScore: true },
+    });
+    const currentScore = borrowerFull?.creditScore ?? 500;
+    if (currentScore < MIN_BORROW_CREDIT_SCORE) {
+      return res.status(403).json({
+        success: false,
+        message: `Your credit score (${currentScore}) is too low to request a loan. Minimum required: ${MIN_BORROW_CREDIT_SCORE}. Repay existing loans on time to improve your score.`,
+        code: "CREDIT_SCORE_TOO_LOW",
+        creditScore: currentScore,
+        minRequired: MIN_BORROW_CREDIT_SCORE,
+      });
     }
 
     // ── Token pre-flight: borrower must have a personal token with balance > 0 ─
@@ -250,6 +267,22 @@ export const acceptLoanRequest = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: "Borrower has not initialized a token (no collateral available)" });
     }
 
+    // ── Credit score gate: verify borrower still has sufficient score at accept time ──
+    const borrowerScoreRecord = await prisma.user.findUnique({
+      where: { id: request.borrowerId },
+      select: { creditScore: true },
+    });
+    const borrowerScore = borrowerScoreRecord?.creditScore ?? 500;
+    if (borrowerScore < MIN_BORROW_CREDIT_SCORE) {
+      return res.status(403).json({
+        success: false,
+        message: `Cannot accept: borrower's credit score (${borrowerScore}) is below the minimum (${MIN_BORROW_CREDIT_SCORE}). They cannot borrow at this time.`,
+        code: "BORROWER_CREDIT_SCORE_TOO_LOW",
+        creditScore: borrowerScore,
+        minRequired: MIN_BORROW_CREDIT_SCORE,
+      });
+    }
+
     // Use 1:1 ratio: collateral tokens equals the loan amount in INR
     const collateralAmount = Number(request.amountINR);
 
@@ -339,6 +372,13 @@ export const acceptLoanRequest = async (req: Request, res: Response) => {
       },
     });
 
+    // Recalculate borrower's credit score — now has an active (or requested) loan
+    try {
+      await recalculateCreditScore(request.borrowerId);
+    } catch (e) {
+      console.warn("[acceptLoanRequest] credit score recalculation failed (non-fatal):", e);
+    }
+
     return res.status(201).json({ success: true, loan: full, blockchainLoanId, txHash });
   } catch (error) {
     console.error("[acceptLoanRequest]", error);
@@ -400,6 +440,10 @@ export const cancelLoanRequest = async (req: Request, res: Response) => {
     if (request.status !== "PENDING") return res.status(400).json({ success: false, message: "Only PENDING requests can be cancelled" });
 
     await prisma.loanRequest.update({ where: { id }, data: { status: "CANCELLED" } });
+
+    // Recalculate borrower's credit score after they cancel a pending request
+    await recalculateCreditScore(borrower.id);
+
     return res.json({ success: true, message: "Request cancelled" });
   } catch (error) {
     console.error("[cancelLoanRequest]", error);
