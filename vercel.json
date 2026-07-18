@@ -1,5 +1,5 @@
 {
-  "buildCommand": "cd ../.. && cd package/db && npx prisma generate && cd ../.. && pnpm turbo run build --filter=client...",
+  "buildCommand": "cd ../.. && cd /package/db && npx prisma generate && cd ../.. && pnpm turbo run build --filter=client...",
   "outputDirectory": "apps/client/.next",
   "installCommand": "cd ../.. && pnpm install",
   "framework": "nextjs"
