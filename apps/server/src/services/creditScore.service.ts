@@ -10,7 +10,7 @@ export const CREDIT_SCORE_DEFAULT = 500;
  *  - Create a new loan request
  *  - Have a lender accept their request
  */
-export const MIN_BORROW_CREDIT_SCORE = 400;
+export const MIN_BORROW_CREDIT_SCORE = 200;
 
 // Points awarded / deducted per event
 const POINTS = {
