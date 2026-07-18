@@ -1,0 +1,6 @@
+{
+  "buildCommand": "cd ../.. && pnpm turbo run build --filter=client...",
+  "outputDirectory": "apps/client/.next",
+  "installCommand": "cd ../.. && pnpm install",
+  "framework": "nextjs"
+}
