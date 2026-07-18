@@ -34,6 +34,12 @@ interface Loan {
   collateralToken: { tokenName: string; symbol: string; contractAddress: string };
 }
 
+interface BorrowerBankInfo {
+  bankName: string;
+  accountHolderName: string;
+  isVerified: boolean;
+}
+
 interface RazorpayOptions {
   key: string;
   amount: number;
@@ -106,6 +112,8 @@ export default function CheckoutPage() {
   const [loanLoading, setLoanLoading] = useState(true);
   const [state, setState] = useState<CheckoutState>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [hasBankAccount, setHasBankAccount] = useState<boolean | null>(null);
+  const [borrowerBankInfo, setBorrowerBankInfo] = useState<BorrowerBankInfo | null>(null);
 
   const userId = (session?.user as any)?.id;
 
@@ -181,6 +189,9 @@ export default function CheckoutPage() {
         throw new Error(data.message || "Failed to create payment order");
       }
       orderData = data;
+      // Capture bank routing info for UI feedback
+      setHasBankAccount(data.hasBankAccount ?? null);
+      setBorrowerBankInfo(data.borrowerBankInfo ?? null);
     } catch (err: any) {
       setState("failed");
       setErrorMsg(err.message || "Could not initiate payment. Please try again.");
@@ -368,7 +379,7 @@ export default function CheckoutPage() {
                 {[
                   { icon: <CheckCircle className="h-3.5 w-3.5 text-emerald-400" />, text: "Payment verified via Razorpay HMAC signature" },
                   { icon: <Zap className="h-3.5 w-3.5 text-amber-400" />, text: `Loan status → ACTIVE instantly` },
-                  { icon: <Coins className="h-3.5 w-3.5 text-blue-400" />, text: `${loan.amountINR} ${loan.collateralToken.symbol} tokens transferred borrower → lender` },
+                  { icon: <Coins className="h-3.5 w-3.5 text-blue-400" />, text: `${loan.amountINR} ${loan.collateralToken.symbol} tokens recorded on blockchain` },
                 ].map(({ icon, text }) => (
                   <div key={text} className="flex items-start gap-2.5">
                     <div className="mt-0.5 shrink-0">{icon}</div>
@@ -376,6 +387,34 @@ export default function CheckoutPage() {
                   </div>
                 ))}
               </div>
+
+              <Separator />
+
+              {/* Bank routing status — shown after order created */}
+              {hasBankAccount === false && (
+                <div className="flex items-start gap-2.5 rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-3">
+                  <AlertCircle className="h-4 w-4 text-yellow-400 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-xs font-semibold text-yellow-400">Borrower has no bank account linked</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Payment will go to the platform account. Ask the borrower to add their bank
+                      details in their profile for direct P2P routing.
+                    </p>
+                  </div>
+                </div>
+              )}
+              {hasBankAccount === true && borrowerBankInfo && (
+                <div className="flex items-start gap-2.5 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
+                  <CheckCircle className="h-4 w-4 text-emerald-400 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-xs font-semibold text-emerald-400">Direct bank transfer enabled</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Money goes directly to <strong>{borrowerBankInfo.accountHolderName}</strong>'s{" "}
+                      {borrowerBankInfo.bankName} account via Razorpay Route.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               <Separator />
 

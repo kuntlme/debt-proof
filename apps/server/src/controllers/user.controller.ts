@@ -4,6 +4,7 @@ import { generateWallet, getDeployer, ethers } from "../services/blockchain.serv
 import { deployDebtToken } from "../services/token.service.js";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
+import { recalculateCreditScore, getCreditTier, MIN_BORROW_CREDIT_SCORE, CREDIT_SCORE_MIN, CREDIT_SCORE_MAX } from "../services/creditScore.service.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -284,6 +285,51 @@ export const issueToken = async (req: Request, res: Response) => {
     return res.json({ success: true, token });
   } catch (error) {
     console.error("[issueToken]", error);
+    return res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+};
+
+/**
+ * GET /users/me/credit-score
+ * Returns the current user's credit score, tier, loan breakdown, and enforced limits.
+ * Also re-calculates the score from the latest loan history before responding.
+ */
+export const getCreditScore = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+
+    // Always recalculate to make sure it's fresh
+    const score = await recalculateCreditScore(userId);
+    const tier = getCreditTier(score);
+
+    // Build a breakdown of loans for context
+    const loans = await prisma.loan.findMany({
+      where: { borrowerId: userId },
+      select: { status: true, amountINR: true, createdAt: true, repaidAt: true, durationDays: true },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const breakdown = {
+      repaid:    loans.filter((l) => l.status === "REPAID").length,
+      defaulted: loans.filter((l) => l.status === "DEFAULTED").length,
+      active:    loans.filter((l) => l.status === "ACTIVE").length,
+      cancelled: loans.filter((l) => l.status === "CANCELLED").length,
+    };
+
+    return res.json({
+      success: true,
+      creditScore: score,
+      tier,
+      breakdown,
+      limits: {
+        minRequired: MIN_BORROW_CREDIT_SCORE,
+        min: CREDIT_SCORE_MIN,
+        max: CREDIT_SCORE_MAX,
+        canBorrow: tier.canBorrow,
+      },
+    });
+  } catch (error) {
+    console.error("[getCreditScore]", error);
     return res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 };

@@ -7,6 +7,7 @@ import {
   getPublicProfile,
   searchUsers,
   issueToken,
+  getCreditScore,
 } from "../controllers/user.controller.js";
 import { authMiddleware } from "../middleware/auth.middleware.js";
 
@@ -17,6 +18,7 @@ router.post("/token", issueToken);                                  // POST /use
 router.post("/onboarding", completeOnboarding);                    // POST /users/onboarding  (public — no wallet yet)
 router.post("/", createUser);                                       // POST /users  (legacy wallet init)
 router.get("/me", authMiddleware, getUser);                        // GET  /users/me
+router.get("/me/credit-score", authMiddleware, getCreditScore);   // GET  /users/me/credit-score
 router.get("/search", authMiddleware, searchUsers);                // GET  /users/search?q=...
 router.get("/:userId/profile", authMiddleware, getPublicProfile); // GET  /users/:userId/profile
 

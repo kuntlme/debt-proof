@@ -18,18 +18,26 @@ function inrToPaise(inr: number): number {
  * // → { id: "order_xxx", amount: 500000, currency: "INR", status: "created", ... }
  */
 export async function createOrder(opts: CreateOrderOptions): Promise<RazorpayOrder> {
-  const { amountINR, receipt, notes = {}, currency = "INR" } = opts;
+  const { amountINR, receipt, notes = {}, currency = "INR", transfers } = opts;
 
   if (amountINR <= 0) {
     throw new Error(`[payment] createOrder: amountINR must be positive, got ${amountINR}`);
   }
 
-  const order = await razorpay.orders.create({
+  const orderPayload: Record<string, unknown> = {
     amount: inrToPaise(amountINR),
     currency,
     receipt,
     notes,
-  });
+  };
+
+  // If transfers are specified (Razorpay Route), attach them.
+  // This routes the payment directly from lender → borrower's linked bank account.
+  if (transfers && transfers.length > 0) {
+    orderPayload["transfers"] = transfers;
+  }
+
+  const order = await razorpay.orders.create(orderPayload as any);
 
   return order as unknown as RazorpayOrder;
 }

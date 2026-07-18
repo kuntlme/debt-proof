@@ -1,11 +1,12 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft, ExternalLink, Copy, CheckCircle, AlertTriangle,
   Clock, TrendingUp, ShieldCheck, Loader2, CreditCard,
+  Lock, ArrowRight,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,43 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import Link from "next/link";
 import { toast } from "sonner";
+
+// ── Razorpay Types ──────────────────────────────────────────────────────────
+interface RazorpayOptions {
+  key: string;
+  amount: number;
+  currency: string;
+  name: string;
+  description: string;
+  order_id: string;
+  prefill?: { name?: string; email?: string };
+  notes?: Record<string, string>;
+  theme?: { color?: string };
+  handler: (response: {
+    razorpay_payment_id: string;
+    razorpay_order_id: string;
+    razorpay_signature: string;
+  }) => void;
+  modal?: { ondismiss?: () => void; escape?: boolean; animation?: boolean };
+}
+
+declare global {
+  interface Window {
+    Razorpay: new (options: RazorpayOptions) => { open: () => void };
+  }
+}
+
+function loadRazorpayScript(): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (document.getElementById("razorpay-sdk")) { resolve(true); return; }
+    const script = document.createElement("script");
+    script.id = "razorpay-sdk";
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+}
 
 type LoanStatus = "REQUESTED" | "ACTIVE" | "REPAID" | "DEFAULTED" | "CANCELLED";
 
@@ -51,8 +89,13 @@ export default function LoanDetailPage() {
   const [loan, setLoan] = useState<Loan | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [repayState, setRepayState] = useState<"idle" | "creating" | "processing">("idle");
+  const [repayError, setRepayError] = useState<string | null>(null);
 
   const userId = (session?.user as any)?.id;
+
+  // Preload Razorpay SDK
+  useEffect(() => { loadRazorpayScript(); }, []);
 
   useEffect(() => {
     async function load() {
@@ -76,7 +119,7 @@ export default function LoanDetailPage() {
     load();
   }, [loanId]);
 
-  async function handleAction(action: "repay" | "default" | "cancel" | "activate") {
+  async function handleAction(action: "default" | "cancel" | "activate") {
     setActionLoading(action);
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/loans/${loanId}/${action}`, {
@@ -96,6 +139,99 @@ export default function LoanDetailPage() {
       setActionLoading(null);
     }
   }
+
+  // ── Razorpay repayment flow ─────────────────────────────────────────────
+  const handleRepay = useCallback(async () => {
+    if (!loan) return;
+    setRepayState("creating");
+
+    const sdkLoaded = await loadRazorpayScript();
+    if (!sdkLoaded || !window.Razorpay) {
+      toast.error("Failed to load Razorpay. Check your connection and try again.");
+      setRepayState("idle");
+      return;
+    }
+
+    // Step 1: Create repayment order
+    let orderData: { order: { id: string; amount: number; currency: string }; keyId: string } | null = null;
+    try {
+      const res = await fetch("/api/payment/create-repay-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ loanId }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        // Special handling for lender missing bank account — show persistent in-card error
+        if (data.code === "LENDER_NO_BANK_ACCOUNT") {
+          setRepayError(data.message);
+          setRepayState("idle");
+          return;
+        }
+        throw new Error(data.message || "Failed to create repayment order");
+      }
+      setRepayError(null); // clear any previous error
+      orderData = data;
+    } catch (err: any) {
+      toast.error(err.message || "Could not initiate repayment. Please try again.");
+      setRepayState("idle");
+      return;
+    }
+
+    // Step 2: Open Razorpay checkout
+    setRepayState("idle"); // Razorpay modal takes over UI
+    const rzpOptions: RazorpayOptions = {
+      key: orderData!.keyId || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "",
+      amount: orderData!.order.amount,
+      currency: orderData!.order.currency,
+      name: "DebtProof",
+      description: `Loan repayment — ${loan.collateralToken.symbol}`,
+      order_id: orderData!.order.id,
+      prefill: {
+        name: session?.user?.name || "",
+        email: session?.user?.email || "",
+      },
+      notes: { loanId, type: "repayment" },
+      theme: { color: "#10b981" },
+      handler: async (response) => {
+        // Step 3: Verify & finalize repayment
+        setRepayState("processing");
+        try {
+          const verifyRes = await fetch("/api/payment/verify-repay", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              loanId,
+              orderId: response.razorpay_order_id,
+              paymentId: response.razorpay_payment_id,
+              signature: response.razorpay_signature,
+            }),
+          });
+          const verifyData = await verifyRes.json();
+          if (!verifyRes.ok || !verifyData.success) {
+            throw new Error(verifyData.message || "Repayment verification failed");
+          }
+          toast.success("🎉 Repayment successful! Collateral released.");
+          setLoan(verifyData.loan);
+        } catch (err: any) {
+          toast.error(err.message || "Repayment verification failed. Contact support.");
+        } finally {
+          setRepayState("idle");
+        }
+      },
+      modal: {
+        ondismiss: () => {
+          setRepayState("idle");
+          toast.info("Repayment cancelled");
+        },
+        escape: false,
+        animation: true,
+      },
+    };
+
+    const rzp = new window.Razorpay(rzpOptions);
+    rzp.open();
+  }, [loan, loanId, session]);
 
   if (loading) {
     return (
@@ -233,20 +369,54 @@ export default function LoanDetailPage() {
       )}
 
       {loan.status === "ACTIVE" && isBorrower && (
-        <Card className="border-emerald-500/20">
+        <Card className="border-emerald-500/20 overflow-hidden">
+          <div className="h-0.5 w-full bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-500" />
           <CardContent className="p-4 space-y-3">
-            <p className="text-sm font-semibold">Borrower Actions</p>
+            <p className="text-sm font-semibold">Repay Loan</p>
+
+            {/* Lender no-bank-account blocking banner */}
+            {repayError && (
+              <div className="flex items-start gap-2.5 rounded-lg border border-red-500/30 bg-red-500/5 p-3">
+                <AlertTriangle className="h-4 w-4 text-red-400 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-xs font-semibold text-red-400">Cannot process repayment</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{repayError}</p>
+                </div>
+              </div>
+            )}
+
+            {!repayError && (
+              <div className="rounded-lg border border-border/60 bg-accent/30 p-3 text-xs space-y-1.5">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">You will pay (via Razorpay)</span>
+                  <span className="font-semibold text-emerald-400">{formatINR(loan.amountINR)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Collateral returned to you</span>
+                  <span className="font-semibold">{loan.collateralAmount} {loan.collateralToken?.symbol}</span>
+                </div>
+              </div>
+            )}
+
             <Button
-              className="w-full rounded-xl bg-emerald-500 text-black hover:bg-emerald-400"
-              onClick={() => handleAction("repay")}
-              disabled={!!actionLoading}
+              id="repay-loan-btn"
+              className="w-full rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-black font-bold hover:from-emerald-400 hover:to-teal-400 shadow-md shadow-emerald-500/20 disabled:opacity-60"
+              onClick={handleRepay}
+              disabled={repayState !== "idle" || !!repayError}
             >
-              {actionLoading === "repay" ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle className="h-4 w-4 mr-2" />}
-              Mark as Repaid
+              {repayState === "creating" ? (
+                <><Loader2 className="h-4 w-4 animate-spin mr-2" />Creating Repayment Order…</>
+              ) : repayState === "processing" ? (
+                <><Loader2 className="h-4 w-4 animate-spin mr-2" />Verifying Repayment…</>
+              ) : (
+                <><CreditCard className="h-4 w-4 mr-2" />Repay {formatINR(loan.amountINR)} via Razorpay<ArrowRight className="h-4 w-4 ml-2" /></>
+              )}
             </Button>
-            <p className="text-xs text-muted-foreground text-center">
-              Confirming repayment will transfer {loan.amountINR} {loan.collateralToken?.symbol} to the lender and release your collateral.
-            </p>
+            {!repayError && (
+              <p className="text-xs text-muted-foreground text-center flex items-center justify-center gap-1">
+                <Lock className="h-3 w-3" /> Secured payment • Collateral released after verification
+              </p>
+            )}
           </CardContent>
         </Card>
       )}

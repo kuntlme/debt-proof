@@ -32,9 +32,44 @@ model User {
   loanRequests         LoanRequest[]        @relation("BorrowerRequests")
   targetedByRequests   LoanRequestLender[]  @relation("LenderTargets")
 
+  // Payment / bank account fields
+  /// Razorpay Linked Account ID (e.g. "acc_xxxxx") — created via Route API
+  /// Set when the borrower adds their bank account for receiving loan disbursements
+  razorpayAccountId String?
+
+  /// Borrower's bank / UPI payout details (one-to-one)
+  bankAccount   BankAccount?
+
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   tokenHoldings TokenHolding[]
+}
+
+// ── Bank Account (for Razorpay Route payout to borrower) ─────────────────────
+
+/// Stores the borrower's bank / UPI details used to create a Razorpay
+/// Linked Account so that the loan amount can be routed directly to them.
+model BankAccount {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Legal name on the bank account
+  accountHolderName String
+  /// Bank account number
+  accountNumber     String
+  /// IFSC code of the bank branch
+  ifscCode          String
+  /// Bank name (e.g. "State Bank of India")
+  bankName          String
+  /// UPI ID as an alternative to bank transfer (optional)
+  upiId             String?
+
+  /// Whether this account has been verified / linked in Razorpay
+  isVerified Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Account {
