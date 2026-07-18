@@ -1,0 +1,10 @@
+{
+  "network": "amoy",
+  "chainId": "80002",
+  "deployedAt": "2026-07-18T02:42:54.636Z",
+  "deployer": "0xB0EC6F119B47e34e18Fe3AC2e9Bd37b13e5b03D2",
+  "contracts": {
+    "LoanManager": "0x5Ac3a9Db61b218F2F7E8f724b67B840ba4e8ab09",
+    "SampleDebtToken": "0x980c7d6CeBFB772385d9eA791026E6b52c329aE8"
+  }
+}
