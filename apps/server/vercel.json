@@ -1,6 +1,7 @@
 {
   "version": 2,
   "framework": null,
+  "outputDirectory": ".",
   "buildCommand": "cd ../.. && pnpm --filter @repo/db db:generate && pnpm install && pnpm exec turbo run build --filter=server",
   "rewrites": [
     {
