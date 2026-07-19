@@ -3,8 +3,9 @@ services:
     name: debt-proof-server
     env: node
     plan: starter
-    buildCommand: corepack enable && corepack prepare pnpm@9.0.0 --activate && pnpm --filter @repo/db db:generate && pnpm install && pnpm exec turbo run build --filter=server
-    startCommand: pnpm --filter server start
+    rootDir: apps/server
+    buildCommand: cd ../.. && corepack enable && corepack prepare pnpm@9.0.0 --activate && pnpm install && pnpm --filter @repo/db db:generate && pnpm exec turbo run build --filter=server
+    startCommand: cd ../.. && pnpm --filter server start
     envVars:
       - key: PORT
         value: 10000
