@@ -117,6 +117,11 @@ const FUND_AMOUNT_ETH = ethers.parseEther("0.1");
  * This is a no-op on testnets/mainnet where the deployer shouldn't be used as a faucet.
  */
 export async function ensureGasFunds(address: string): Promise<void> {
+  const networkName = process.env.NETWORK_NAME || "localhost";
+  if (networkName !== "localhost") {
+    return;
+  }
+
   try {
     const provider = getProvider();
     const balance = await provider.getBalance(address);

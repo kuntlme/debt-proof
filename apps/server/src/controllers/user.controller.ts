@@ -339,6 +339,20 @@ export const requestAirdrop = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: "No wallet address associated with this account" });
     }
 
+    const networkName = process.env.NETWORK_NAME || "localhost";
+    if (networkName !== "localhost") {
+      let faucetMessage = "Airdrops are only supported on the local development network.";
+      if (networkName === "sepolia") {
+        faucetMessage = "Airdrops are not supported on Sepolia testnet. Please use a public faucet (e.g., Alchemy Sepolia Faucet or Google Cloud Faucet) to request testnet ETH.";
+      } else if (networkName === "amoy") {
+        faucetMessage = "Airdrops are not supported on Polygon Amoy. Please use the official Polygon Faucet to request testnet MATIC.";
+      }
+      return res.status(400).json({
+        success: false,
+        message: faucetMessage,
+      });
+    }
+
     const provider = getProvider();
     const balanceBefore = await provider.getBalance(user.walletAddress);
 
