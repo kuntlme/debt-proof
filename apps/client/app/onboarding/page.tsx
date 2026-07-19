@@ -16,18 +16,12 @@ import { cn } from "@/lib/utils";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type Step = "profile" | "wallet-init" | "keys-reveal" | "token-init" | "done";
+type Step = "profile" | "wallet-init" | "keys-reveal" | "done";
 
 interface WalletData {
   address: string;
   mnemonic: string;
   privateKey: string;
-}
-
-interface TokenData {
-  tokenName: string;
-  symbol: string;
-  contractAddress: string;
 }
 
 // ── Step indicator ────────────────────────────────────────────────────────────
@@ -36,7 +30,6 @@ const STEPS: { id: Step; label: string }[] = [
   { id: "profile", label: "Profile" },
   { id: "wallet-init", label: "Wallet" },
   { id: "keys-reveal", label: "Backup Keys" },
-  { id: "token-init", label: "Token" },
 ];
 
 function StepDots({ current }: { current: Step }) {
@@ -117,15 +110,11 @@ export default function OnboardingPage() {
   // ── Wallet step ──
   const [walletSteps, setWalletSteps] = useState([false, false, false]);
   const [wallet, setWallet] = useState<WalletData | null>(null);
-  const [token, setToken] = useState<TokenData | null>(null);
 
   // ── Keys step ──
   const [showSeed, setShowSeed] = useState(false);
   const [showPrivKey, setShowPrivKey] = useState(false);
   const [savedChecked, setSavedChecked] = useState(false);
-
-  // ── Token step ──
-  const [tokenSteps, setTokenSteps] = useState([false, false, false]);
 
   // Redirect if already onboarded
   useEffect(() => {
@@ -214,63 +203,7 @@ export default function OnboardingPage() {
   // ── Step 3: proceed after saving keys ──
   function handleKeysProceed() {
     if (!savedChecked) { toast.error("Please confirm you've saved your recovery phrase"); return; }
-    setStep("token-init");
-    runTokenInit();
-  }
-
-  function handleKeysSkip() {
-    if (!savedChecked) { toast.error("Please confirm you've saved your recovery phrase"); return; }
     setStep("done");
-  }
-
-  // ── Step 4: token animation ──
-  async function runTokenInit() {
-    try {
-      // 1. Start compile animation
-      setTokenSteps([true, false, false]);
-      await delay(800);
-
-      // 2. Start deploy animation and call endpoint
-      setTokenSteps([true, true, false]);
-
-      const jwtRes = await fetch("/api/auth/jwt");
-      if (!jwtRes.ok) {
-        throw new Error("Failed to authenticate session");
-      }
-      const { token: jwt } = await jwtRes.json();
-
-      const symbol = username.slice(0, 4).toUpperCase();
-      const tokenName = `${name.split(" ")[0]}'s Token`;
-
-      const deployRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/tokens/create`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${jwt}`,
-        },
-        body: JSON.stringify({ tokenName, symbol }),
-      });
-
-      const deployData = await deployRes.json();
-      if (!deployRes.ok || !deployData.success) {
-        throw new Error(deployData.message || "Token deployment failed");
-      }
-
-      setToken({
-        tokenName: deployData.token.tokenName,
-        symbol: deployData.token.symbol,
-        contractAddress: deployData.token.contractAddress,
-      });
-
-      // 3. Complete animation
-      setTokenSteps([true, true, true]);
-      await delay(800);
-      setStep("done");
-    } catch (err: any) {
-      toast.error(err.message || "Token initialization failed. You can initialize it later from your dashboard.");
-      await delay(1000);
-      setStep("done");
-    }
   }
 
   // ── Step 5: done → dashboard ──
@@ -530,52 +463,14 @@ export default function OnboardingPage() {
                 </Label>
               </div>
 
-              <div className="flex gap-3">
-                <Button
-                  id="keys-skip"
-                  variant="outline"
-                  onClick={handleKeysSkip}
-                  disabled={!savedChecked}
-                  className="flex-1 rounded-xl border-white/10 text-white hover:bg-white/5 h-11 disabled:opacity-50"
-                >
-                  Skip Token
-                </Button>
-                <Button
-                  id="keys-proceed"
-                  onClick={handleKeysProceed}
-                  disabled={!savedChecked}
-                  className="flex-1 rounded-xl bg-emerald-500 text-black font-semibold hover:bg-emerald-400 h-11 gap-2 disabled:opacity-50"
-                >
-                  Create Token <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* ── STEP 4: Token Initialization ── */}
-          {step === "token-init" && (
-            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div className="text-center">
-                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-purple-500/10 ring-1 ring-purple-500/20 mx-auto mb-4">
-                  <Coins className="h-8 w-8 text-purple-400" />
-                </div>
-                <h2 className="text-xl font-bold text-white">Initializing Your Token</h2>
-                <p className="text-sm text-muted-foreground mt-2">Deploying your personal collateral token…</p>
-              </div>
-
-              <div className="rounded-xl border border-white/10 bg-white/5 p-5 space-y-4">
-                <InitStep label="Compiling smart contract…" done={tokenSteps[0]} active={!tokenSteps[0]} />
-                <InitStep label={`Deploying ${token?.tokenName || "your token"} (${token?.symbol || "???"}) on-chain…`} done={tokenSteps[1]} active={tokenSteps[0] && !tokenSteps[1]} />
-                <InitStep label="10,000 tokens credited to your wallet!" done={tokenSteps[2]} active={tokenSteps[1] && !tokenSteps[2]} />
-              </div>
-
-              <div className="flex justify-center">
-                <div className="flex gap-1">
-                  {[0, 1, 2, 3, 4].map((i) => (
-                    <div key={i} className="h-1 w-1 rounded-full bg-purple-500/40 animate-pulse" style={{ animationDelay: `${i * 200}ms` }} />
-                  ))}
-                </div>
-              </div>
+              <Button
+                id="keys-proceed"
+                onClick={handleKeysProceed}
+                disabled={!savedChecked}
+                className="w-full rounded-xl bg-emerald-500 text-black font-semibold hover:bg-emerald-400 h-11 gap-2 disabled:opacity-50"
+              >
+                Finish Onboarding <ChevronRight className="h-4 w-4" />
+              </Button>
             </div>
           )}
 
@@ -587,7 +482,7 @@ export default function OnboardingPage() {
                   <PartyPopper className="h-10 w-10 text-emerald-400" />
                 </div>
                 <h2 className="text-2xl font-bold text-white">You're all set! 🎉</h2>
-                <p className="text-sm text-muted-foreground mt-2">Your wallet and personal token have been created.</p>
+                <p className="text-sm text-muted-foreground mt-2">Your wallet has been created.</p>
               </div>
 
               <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 space-y-2 text-left">
@@ -595,12 +490,6 @@ export default function OnboardingPage() {
                   <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
                   Wallet created at <span className="font-mono text-emerald-400 truncate">{wallet?.address?.slice(0, 20)}…</span>
                 </div>
-                {token && (
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-                    Token <strong className="text-white">{token.tokenName} ({token.symbol})</strong> — 10,000 tokens minted
-                  </div>
-                )}
               </div>
 
               <Button
