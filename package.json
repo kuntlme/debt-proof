@@ -12,7 +12,8 @@
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types",
-    "start": "pnpm --filter server start"
+    "server:start": "pnpm --filter server start",
+    "client:start": "pnpm --filter client start"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
