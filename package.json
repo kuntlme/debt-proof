@@ -13,7 +13,8 @@
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types",
     "server:start": "pnpm --filter server start",
-    "client:start": "pnpm --filter client start"
+    "client:start": "pnpm --filter client start",
+    "start": "pnpm --filter server start"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
