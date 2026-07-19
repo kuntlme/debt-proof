@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import prisma from "@repo/db";
 import { createTokenSchema } from "../schemas/token.schema.js";
 import { deployDebtToken, getTokenBalance, getTokenInfo } from "../services/token.service.js";
-import { ensureGasFunds } from "../services/blockchain.service.js";
+import { ensureGasFunds, getDeployer } from "../services/blockchain.service.js";
 
 
 /**
@@ -76,8 +76,15 @@ export const createToken = async (req: Request, res: Response) => {
     });
 
     return res.status(201).json({ success: true, token: fullToken, txHash });
-  } catch (error) {
+  } catch (error: any) {
     console.error("[createToken]", error);
+    if (error.code === "INSUFFICIENT_FUNDS" || error.message?.includes("insufficient funds")) {
+      const deployer = getDeployer();
+      return res.status(500).json({
+        success: false,
+        message: `The server deployer account (${deployer.address}) does not have enough native tokens to pay for the gas to deploy the token contract. Please fund this address.`,
+      });
+    }
     return res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 };
