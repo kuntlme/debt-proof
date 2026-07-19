@@ -1,0 +1,5 @@
+{
+  "buildCommand": "cd ../.. && pnpm --filter @repo/db db:generate && pnpm exec turbo run build --filter=client",
+  "outputDirectory": ".next",
+  "framework": "nextjs"
+}
