@@ -1,10 +1,11 @@
 import { Request, Response } from "express";
 import prisma from "@repo/db";
-import { generateWallet, getDeployer, ethers } from "../services/blockchain.service.js";
+import { generateWallet, getDeployer, ethers, ensureGasFunds } from "../services/blockchain.service.js";
 import { deployDebtToken } from "../services/token.service.js";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { recalculateCreditScore, getCreditTier, MIN_BORROW_CREDIT_SCORE, CREDIT_SCORE_MIN, CREDIT_SCORE_MAX } from "../services/creditScore.service.js";
+
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -69,17 +70,7 @@ export const completeOnboarding = async (req: Request, res: Response) => {
     const { address, encryptedJson, mnemonic, privateKey } = await generateWallet(encryptionPassword);
 
     // 1b. Fund the new wallet with ETH for gas (non-fatal)
-    try {
-      const deployer = getDeployer();
-      const fundTx = await deployer.sendTransaction({
-        to: address,
-        value: ethers.parseEther("0.1"),
-      });
-      await fundTx.wait();
-      console.log(`[completeOnboarding] funded ${address} with 0.1 ETH`);
-    } catch (e) {
-      console.warn("[completeOnboarding] wallet funding failed (non-fatal):", e);
-    }
+    await ensureGasFunds(address);
 
     // 2. Store the encrypted JSON keystore (used by wallet.service to decrypt later)
     //    We store encryptedJson directly — decryptWallet(encryptedJson, password) recovers the key
@@ -147,6 +138,9 @@ export const createUser = async (req: Request, res: Response) => {
 
     const encryptionPassword = process.env.WALLET_ENCRYPTION_SECRET || userId;
     const { address } = await generateWallet(encryptionPassword);
+
+    // Fund with gas (airdrop)
+    await ensureGasFunds(address);
 
     const updated = await prisma.user.update({
       where: { id: userId },

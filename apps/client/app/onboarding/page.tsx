@@ -566,7 +566,7 @@ export default function OnboardingPage() {
               <div className="rounded-xl border border-white/10 bg-white/5 p-5 space-y-4">
                 <InitStep label="Compiling smart contract…" done={tokenSteps[0]} active={!tokenSteps[0]} />
                 <InitStep label={`Deploying ${token?.tokenName || "your token"} (${token?.symbol || "???"}) on-chain…`} done={tokenSteps[1]} active={tokenSteps[0] && !tokenSteps[1]} />
-                <InitStep label="100 tokens credited to your wallet!" done={tokenSteps[2]} active={tokenSteps[1] && !tokenSteps[2]} />
+                <InitStep label="10,000 tokens credited to your wallet!" done={tokenSteps[2]} active={tokenSteps[1] && !tokenSteps[2]} />
               </div>
 
               <div className="flex justify-center">
@@ -598,7 +598,7 @@ export default function OnboardingPage() {
                 {token && (
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-                    Token <strong className="text-white">{token.tokenName} ({token.symbol})</strong> — 100 tokens minted
+                    Token <strong className="text-white">{token.tokenName} ({token.symbol})</strong> — 10,000 tokens minted
                   </div>
                 )}
               </div>

@@ -96,4 +96,33 @@ export function formatUnits(value: bigint, decimals: number = 18): string {
   return ethers.formatUnits(value, decimals);
 }
 
+/** Minimum ETH a wallet must hold to cover gas (≈ 0.01 ETH). */
+const MIN_GAS_ETH = ethers.parseEther("0.01");
+/** How much ETH to send when a wallet needs topping up. */
+const FUND_AMOUNT_ETH = ethers.parseEther("0.1");
+
+/**
+ * Ensure `address` has enough ETH for gas on the blockchain.
+ * If the balance is below MIN_GAS_ETH, the deployer account funds it.
+ * This is a no-op on testnets/mainnet where the deployer shouldn't be used as a faucet.
+ */
+export async function ensureGasFunds(address: string): Promise<void> {
+  try {
+    const provider = getProvider();
+    const balance = await provider.getBalance(address);
+    if (balance < MIN_GAS_ETH) {
+      console.warn(
+        `[blockchain.service] Wallet ${address} has only ${ethers.formatEther(balance)} ETH — auto-funding with ${ethers.formatEther(FUND_AMOUNT_ETH)} ETH from deployer.`
+      );
+      const deployer = getDeployer();
+      const tx = await deployer.sendTransaction({ to: address, value: FUND_AMOUNT_ETH });
+      await tx.wait();
+      console.log(`[blockchain.service] Funded ${address} — new balance: ${ethers.formatEther(await provider.getBalance(address))} ETH`);
+    }
+  } catch (error: any) {
+    console.warn(`[blockchain.service] Wallet funding failed for ${address}:`, error.message || error);
+  }
+}
+
 export { ethers };
+

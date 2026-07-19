@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import prisma from "@repo/db";
 import { createTokenSchema } from "../schemas/token.schema.js";
 import { deployDebtToken, getTokenBalance, getTokenInfo } from "../services/token.service.js";
+import { ensureGasFunds } from "../services/blockchain.service.js";
+
 
 /**
  * POST /tokens/create
@@ -30,6 +32,9 @@ export const createToken = async (req: Request, res: Response) => {
     if (existingToken) {
       return res.status(409).json({ success: false, message: "Token already exists" });
     }
+
+    // Ensure wallet is funded (airdropped) with ETH gas before/during token initialization
+    await ensureGasFunds(user.walletAddress);
 
     // Deploy ERC-20 on blockchain
     const { contractAddress, txHash } = await deployDebtToken(
