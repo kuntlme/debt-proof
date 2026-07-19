@@ -3,13 +3,14 @@
 import { useEffect, useState } from "react";
 import {
   Globe, Users, Clock, IndianRupee, ChevronRight,
-  Bell, Loader2, RefreshCw,
+  Bell, Loader2, RefreshCw, Shield, Sparkles, AlertCircle
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Link from "next/link";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -56,53 +57,102 @@ async function getJwt(): Promise<string> {
 
 function RequestCard({ req, isPublic }: { req: LoanRequest; isPublic: boolean }) {
   const b = req.borrower;
+  
   return (
-    <Card className="border-border/60 hover:border-emerald-500/20 transition-all hover:bg-accent/20 group">
-      <CardContent className="p-4">
-        <div className="flex items-start gap-3">
-          <Avatar className="h-9 w-9 shrink-0 ring-1 ring-white/10">
-            <AvatarImage src={b.image ?? ""} />
-            <AvatarFallback className="text-xs bg-emerald-500/20 text-emerald-400">
-              {b.name?.[0] || b.email?.[0] || "?"}
-            </AvatarFallback>
-          </Avatar>
+    <Card className="relative overflow-hidden border-border/40 bg-card/30 backdrop-blur-md hover:border-emerald-500/30 transition-all duration-300 hover:shadow-[0_0_20px_-5px_rgba(16,185,129,0.12)] group">
+      {/* Visual Accent Glow */}
+      <div className={cn(
+        "absolute top-0 left-0 w-full h-[2px] opacity-70 transition-opacity group-hover:opacity-100",
+        isPublic ? "bg-gradient-to-r from-blue-500 to-cyan-500" : "bg-gradient-to-r from-emerald-500 to-teal-500"
+      )} />
 
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <p className="text-sm font-semibold text-foreground truncate">{b.name || b.email || "Unknown"}</p>
-              {b.username && <span className="text-xs text-muted-foreground">@{b.username}</span>}
-              <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0 ml-auto shrink-0", creditColor(b.creditScore))}>
-                Score: {b.creditScore}
-              </Badge>
+      <CardContent className="p-5 space-y-4">
+        {/* Header: Avatar, Name, Trust Score */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <Avatar className="h-10 w-10 shrink-0 ring-2 ring-emerald-500/10">
+              <AvatarImage src={b.image ?? ""} />
+              <AvatarFallback className="text-xs font-semibold bg-emerald-500/20 text-emerald-400">
+                {b.name?.[0] || b.email?.[0] || "?"}
+              </AvatarFallback>
+            </Avatar>
+
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-foreground truncate">
+                {b.name || b.email || "Unknown Borrower"}
+              </p>
+              {b.username ? (
+                <span className="text-xs text-muted-foreground">@{b.username}</span>
+              ) : (
+                <span className="text-[10px] text-muted-foreground truncate block max-w-[120px]">{b.email}</span>
+              )}
             </div>
+          </div>
 
-            <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground flex-wrap">
-              <span className="flex items-center gap-1">
-                <IndianRupee className="h-3 w-3" />
-                <strong className="text-foreground text-sm">₹{Number(req.amountINR).toLocaleString("en-IN")}</strong>
-              </span>
-              <span className="flex items-center gap-1">
-                <Clock className="h-3 w-3" />
-                {req.durationDays} days
-              </span>
-              <span>{new Date(req.createdAt).toLocaleDateString("en-IN")}</span>
-            </div>
+          <Badge variant="outline" className={cn("text-[10px] font-medium px-2 py-0.5 shrink-0", creditColor(b.creditScore))}>
+            Score: {b.creditScore}
+          </Badge>
+        </div>
 
-            {req.note && (
-              <p className="text-xs text-muted-foreground mt-1.5 italic truncate">"{req.note}"</p>
-            )}
+        {/* Borrower Trust Scale progress */}
+        <div className="space-y-1">
+          <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+            <span>Reputation Score</span>
+            <span className="font-semibold text-foreground">{b.creditScore}/850</span>
+          </div>
+          <div className="w-full bg-muted/40 h-1.5 rounded-full overflow-hidden relative">
+            <div 
+              className={cn(
+                "h-full rounded-full transition-all duration-500",
+                b.creditScore >= 700 ? "bg-emerald-500" : b.creditScore >= 500 ? "bg-yellow-500" : "bg-red-500"
+              )}
+              style={{ width: `${Math.min(100, Math.max(10, (b.creditScore / 850) * 100))}%` }}
+            />
           </div>
         </div>
 
-        <div className="mt-3 flex justify-end">
+        {/* Loan Details Box */}
+        <div className="grid grid-cols-2 gap-3 bg-muted/20 border border-border/30 rounded-xl p-3 text-xs">
+          <div className="space-y-1">
+            <span className="text-[10px] text-muted-foreground block uppercase tracking-wider">Amount</span>
+            <span className="font-bold text-foreground text-sm flex items-center gap-0.5">
+              <IndianRupee className="h-3 w-3 text-emerald-400" />
+              <span>{Number(req.amountINR).toLocaleString("en-IN")}</span>
+            </span>
+          </div>
+
+          <div className="space-y-1">
+            <span className="text-[10px] text-muted-foreground block uppercase tracking-wider">Duration</span>
+            <span className="font-semibold text-foreground flex items-center gap-1">
+              <Clock className="h-3.5 w-3.5 text-cyan-400" />
+              <span>{req.durationDays} days</span>
+            </span>
+          </div>
+        </div>
+
+        {/* Note blockquote */}
+        {req.note ? (
+          <div className="rounded-xl bg-accent/30 border-l-2 border-emerald-500/50 p-2.5 text-xs text-muted-foreground italic leading-relaxed">
+            "{req.note}"
+          </div>
+        ) : (
+          <div className="h-2" />
+        )}
+
+        {/* Actions & Tag */}
+        <div className="flex items-center justify-between pt-2 border-t border-border/35">
+          <div className="text-[10px] text-muted-foreground">
+            {new Date(req.createdAt).toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric" })}
+          </div>
+
           <Link href={`/dashboard/notifications/${req.id}`}>
             <Button
               size="sm"
               variant="outline"
-              className="h-7 rounded-lg gap-1.5 text-xs border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+              className="h-8 rounded-xl gap-1 px-3 text-xs font-semibold border-emerald-500/20 bg-emerald-500/5 text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/30 transition-all"
               id={`check-details-${req.id}`}
             >
-              Check Details <ChevronRight className="h-3 w-3" />
+              Verify Terms <ChevronRight className="h-3.5 w-3.5" />
             </Button>
           </Link>
         </div>
@@ -113,12 +163,19 @@ function RequestCard({ req, isPublic }: { req: LoanRequest; isPublic: boolean })
 
 // ── Empty state ───────────────────────────────────────────────────────────────
 
-function EmptyPanel({ message }: { message: string }) {
+function EmptyPanel({ message, title, icon: Icon }: { message: string; title: string; icon: any }) {
   return (
-    <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
-      <Bell className="h-10 w-10 mb-3 opacity-20" />
-      <p className="text-sm">{message}</p>
-    </div>
+    <Card className="border-dashed border-border/60 bg-card/10 py-16 px-4 backdrop-blur-sm">
+      <CardContent className="flex flex-col items-center justify-center text-center max-w-sm mx-auto">
+        <div className="rounded-2xl bg-muted/40 p-4 mb-4 ring-1 ring-border/50">
+          <Icon className="h-8 w-8 text-muted-foreground/60" />
+        </div>
+        <h3 className="text-base font-semibold text-foreground">{title}</h3>
+        <p className="text-xs text-muted-foreground/75 mt-2 leading-relaxed">
+          {message}
+        </p>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -153,19 +210,19 @@ export default function NotificationsPage() {
   useEffect(() => { load(); }, []);
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
+    <div className="p-6 lg:p-8 space-y-8 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-border/30 pb-6">
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <Bell className="h-5 w-5 text-emerald-400" /> Notifications
+            <Bell className="h-6 w-6 text-emerald-400" /> Notifications
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">Loan requests awaiting your response</p>
+          <p className="text-sm text-muted-foreground mt-1">Review and manage peer-to-peer loan requests awaiting your verify actions.</p>
         </div>
         <Button
           variant="outline"
           size="sm"
-          className="rounded-xl gap-1.5 self-start sm:self-auto"
+          className="rounded-xl gap-1.5 self-start sm:self-auto border-border/80 h-9 font-medium"
           onClick={load}
           disabled={loading}
         >
@@ -173,62 +230,75 @@ export default function NotificationsPage() {
         </Button>
       </div>
 
-      {/* Split panel */}
-      <div className="grid gap-6 lg:grid-cols-[2fr_3fr]">
-        {/* Left — Public Requests */}
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Globe className="h-4 w-4 text-blue-400" />
-            <h2 className="text-sm font-semibold text-foreground">Public Requests</h2>
-            {!loading && publicRequests.length > 0 && (
-              <Badge className="h-5 rounded-full px-1.5 text-[10px] bg-blue-500/15 text-blue-400 border-blue-500/20 ml-auto">
-                {publicRequests.length}
-              </Badge>
-            )}
-          </div>
-
-          {loading ? (
-            <div className="space-y-3">
-              {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-24 w-full rounded-xl" />)}
-            </div>
-          ) : publicRequests.length === 0 ? (
-            <EmptyPanel message="No public requests at the moment" />
-          ) : (
-            <div className="space-y-3">
-              {publicRequests.map((req) => (
-                <RequestCard key={req.id} req={req} isPublic />
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Right — In-Person (Targeted) Requests */}
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Users className="h-4 w-4 text-emerald-400" />
-            <h2 className="text-sm font-semibold text-foreground">Requests Sent to You</h2>
+      {/* Tabs Interface */}
+      <Tabs defaultValue="direct" className="w-full space-y-6">
+        <TabsList className="bg-muted/30 border border-border/40 rounded-xl p-1 h-12 w-full max-w-md">
+          <TabsTrigger value="direct" className="rounded-lg h-10 gap-2 font-medium flex-1">
+            <Users className="h-4 w-4" />
+            <span>Direct Offers</span>
             {!loading && inPersonRequests.length > 0 && (
-              <Badge className="h-5 rounded-full px-1.5 text-[10px] bg-emerald-500/15 text-emerald-400 border-emerald-500/20 ml-auto">
+              <Badge className="h-5 min-w-5 rounded-full px-1.5 text-[9px] bg-emerald-500 text-black border-transparent flex items-center justify-center font-bold">
                 {inPersonRequests.length}
               </Badge>
             )}
-          </div>
+          </TabsTrigger>
+          <TabsTrigger value="public" className="rounded-lg h-10 gap-2 font-medium flex-1">
+            <Globe className="h-4 w-4" />
+            <span>Marketplace Pools</span>
+            {!loading && publicRequests.length > 0 && (
+              <Badge className="h-5 min-w-5 rounded-full px-1.5 text-[9px] bg-blue-500 text-white border-transparent flex items-center justify-center font-bold">
+                {publicRequests.length}
+              </Badge>
+            )}
+          </TabsTrigger>
+        </TabsList>
 
+        {/* Direct Proposals Content */}
+        <TabsContent value="direct" className="space-y-4 outline-none">
           {loading ? (
-            <div className="space-y-3">
-              {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-24 w-full rounded-xl" />)}
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {[...Array(3)].map((_, i) => (
+                <Skeleton key={i} className="h-[280px] w-full rounded-2xl" />
+              ))}
             </div>
           ) : inPersonRequests.length === 0 ? (
-            <EmptyPanel message="No personal requests for you yet" />
+            <EmptyPanel 
+              title="No direct proposals yet" 
+              message="When borrowers send peer-to-peer loan requests targeting your wallet directly, they will appear here." 
+              icon={Users} 
+            />
           ) : (
-            <div className="space-y-3">
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               {inPersonRequests.map((req) => (
                 <RequestCard key={req.id} req={req} isPublic={false} />
               ))}
             </div>
           )}
-        </div>
-      </div>
+        </TabsContent>
+
+        {/* Public Proposals Content */}
+        <TabsContent value="public" className="space-y-4 outline-none">
+          {loading ? (
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {[...Array(3)].map((_, i) => (
+                <Skeleton key={i} className="h-[280px] w-full rounded-2xl" />
+              ))}
+            </div>
+          ) : publicRequests.length === 0 ? (
+            <EmptyPanel 
+              title="Marketplace pool is empty" 
+              message="No public loan verification requests are currently active. Check back later or create a loan offer." 
+              icon={Globe} 
+            />
+          ) : (
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {publicRequests.map((req) => (
+                <RequestCard key={req.id} req={req} isPublic />
+              ))}
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
