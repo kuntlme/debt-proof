@@ -1,7 +1,8 @@
 import { auth } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
+import { getApiUrl } from "@/lib/utils";
 
-const API_URL = process.env.API_URL || "http://localhost:8080";
+const API_URL = getApiUrl();
 
 /**
  * POST /api/payment/verify-repay
