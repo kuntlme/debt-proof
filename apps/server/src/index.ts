@@ -33,6 +33,10 @@ app.get("/health", (_req, res) => {
   return res.json({ health: "good", timestamp: new Date().toISOString() });
 });
 
+// Export for Vercel serverless handler
+export default app;
+
+// Start the server when run directly (local dev)
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`🚀 DebtProof server running on port ${PORT}`);
