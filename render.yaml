@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: debt-proof-server
+    env: node
+    plan: starter
+    buildCommand: corepack enable && corepack prepare pnpm@9.0.0 --activate && pnpm --filter @repo/db db:generate && pnpm install && pnpm exec turbo run build --filter=server
+    startCommand: pnpm --filter server start
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: CLIENT_URL
+        sync: false
+      - key: RPC_URL
+        sync: false
+      - key: NETWORK_NAME
+        sync: false
+      - key: DEPLOYER_PRIVATE_KEY
+        sync: false
+      - key: WALLET_ENCRYPTION_SECRET
+        sync: false
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
