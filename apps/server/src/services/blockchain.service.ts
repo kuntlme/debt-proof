@@ -14,7 +14,17 @@ let _deployer: ethers.Wallet | null = null;
 export function getProvider(): ethers.JsonRpcProvider {
   if (!_provider) {
     const rpcUrl = process.env.RPC_URL || "http://127.0.0.1:8545";
-    _provider = new ethers.JsonRpcProvider(rpcUrl);
+    const networkName = process.env.NETWORK_NAME || "localhost";
+    
+    let chainId = 31337;
+    if (networkName === "sepolia") chainId = 11155111;
+    else if (networkName === "amoy") chainId = 80002;
+
+    _provider = new ethers.JsonRpcProvider(
+      rpcUrl,
+      { name: networkName, chainId },
+      { staticNetwork: true }
+    );
   }
   return _provider;
 }

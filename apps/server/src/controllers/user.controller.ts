@@ -368,6 +368,12 @@ export const requestAirdrop = async (req: Request, res: Response) => {
     }
   } catch (error: any) {
     console.error("[requestAirdrop]", error);
+    if (error.code === "ECONNREFUSED" || error.message?.includes("connect ECONNREFUSED")) {
+      return res.status(503).json({
+        success: false,
+        message: "Failed to connect to the blockchain network. Please ensure the local Hardhat node is running and try again.",
+      });
+    }
     return res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 };
