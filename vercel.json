@@ -1,6 +1,5 @@
 {
   "buildCommand": "pnpm --filter @repo/db db:generate && pnpm --filter @repo/db build && pnpm install && pnpm run build",
   "outputDirectory": ".next",
-  "installCommand": "pnpm install",
-  "framework": "nextjs"
+  "installCommand": "pnpm install"
 }
