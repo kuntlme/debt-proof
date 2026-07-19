@@ -3,14 +3,14 @@
     "buildCommand": "cd ../.. && pnpm --filter @repo/db db:generate && pnpm install && pnpm exec turbo run build --filter=server",
     "builds": [
         {
-            "src": "api/index.ts",
+            "src": "api/index.js",
             "use": "@vercel/node"
         }
     ],
     "routes": [
         {
             "src": "/(.*)",
-            "dest": "api/index.ts"
+            "dest": "api/index.js"
         }
     ]
 }
