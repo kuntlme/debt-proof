@@ -36,6 +36,7 @@ function Navbar() {
               <Button
                 variant="ghost"
                 className="rounded-full text-foreground hover:bg-accent hover:text-accent-foreground"
+                onClick={() => router.push("/dashboard")}
               >
                 Dashboard
               </Button>
@@ -43,6 +44,7 @@ function Navbar() {
               <Button
                 variant="outline"
                 className="rounded-full border-border bg-background hover:bg-accent"
+                onClick={() => router.push("/dashboard/profile")}
               >
                 {session.user?.name || "Account"}
               </Button>

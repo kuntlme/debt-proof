@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import {
   ArrowDownLeft,
   ArrowUpRight,
+  ArrowLeftRight,
   TrendingUp,
   Clock,
   CheckCircle,
@@ -297,6 +298,3 @@ async function getJwt(): Promise<string | null> {
   } catch {}
   return null;
 }
-
-// Import for the ArrowLeftRight icon used in empty state
-import { ArrowLeftRight } from "lucide-react";

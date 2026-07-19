@@ -8,10 +8,23 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from "@/components/ui/dialog"
 import { useRouter } from "next/navigation"
+import { useSession } from "next-auth/react"
+import { BookOpen, Shield, ShieldCheck, Wallet, ArrowRight } from "lucide-react"
 
 export default function Page() {
   const router = useRouter();
+  const { data: session } = useSession();
+
   return (
     <>
       <Navbar />
@@ -42,26 +55,86 @@ export default function Page() {
             tamper-proof debt contracts between lenders and borrowers.
           </p>
 
-          <div className="mt-10 flex flex-col gap-4 sm:flex-row">
+          <div className="mt-10 flex flex-col gap-4 sm:flex-row items-center justify-center">
             <Button
               size="lg"
-              className="rounded-2xl bg-emerald-500 px-8 text-black hover:bg-emerald-400"
+              className="rounded-2xl bg-emerald-500 px-8 text-black hover:bg-emerald-400 font-semibold"
               onClick={() => {
-                // "use client";
-                router.push("/dashboard")
+                router.push(session ? "/dashboard" : "/login")
               }}
             >
               Start Transaction
             </Button>
 
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="rounded-2xl"
+                >
+                  View Documentation
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[600px] border-border/60 bg-card/95 backdrop-blur-2xl text-foreground p-6">
+                <DialogHeader>
+                  <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10">
+                    <BookOpen className="h-6 w-6 text-emerald-500" />
+                  </div>
+                  <DialogTitle className="text-2xl font-bold text-center">DebtProof Documentation</DialogTitle>
+                  <DialogDescription className="text-center text-muted-foreground">
+                    Learn how the decentralized peer-to-peer debt verification protocol works.
+                  </DialogDescription>
+                </DialogHeader>
+                
+                <div className="space-y-6 py-4">
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-semibold flex items-center gap-2 text-emerald-400">
+                      <Shield className="h-4 w-4" /> 1. Decentralized Debt Agreements
+                    </h4>
+                    <p className="text-xs text-muted-foreground leading-relaxed pl-6">
+                      Lenders and Borrowers can propose and counter-sign peer-to-peer loan agreements. 
+                      Once signed, the agreement terms (amount, interest rate, duration, and collateral) 
+                      are permanently written to the blockchain as an immutable smart contract.
+                    </p>
+                  </div>
 
-            <Button
-              size="lg"
-              variant="outline"
-              className="rounded-2xl"
-            >
-              View Documentation
-            </Button>
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-semibold flex items-center gap-2 text-emerald-400">
+                      <Wallet className="h-4 w-4" /> 2. Collateral Protection
+                    </h4>
+                    <p className="text-xs text-muted-foreground leading-relaxed pl-6">
+                      Borrowers can lock dynamic digital token collateral in a secure escrow smart contract.
+                      This minimizes lender risk and secures borrowers' collateral. The contract enforces 
+                      automatic liquidation rules if defaults occur.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-semibold flex items-center gap-2 text-emerald-400">
+                      <ShieldCheck className="h-4 w-4" /> 3. Verification & Reputation
+                    </h4>
+                    <p className="text-xs text-muted-foreground leading-relaxed pl-6">
+                      Every transaction leaves an auditable cryptographic footprint. Credit profiles are built
+                      on-chain based on past repayment histories, allowing users to build a trust score 
+                      independent of traditional centralized bureaus.
+                    </p>
+                  </div>
+                </div>
+
+                <DialogFooter className="flex sm:justify-between items-center border-t border-border/50 pt-4 mt-2 gap-4">
+                  <p className="text-[10px] text-muted-foreground">DebtProof v1.0.0 • Sepolia Testnet</p>
+                  <DialogTrigger asChild>
+                    <Button 
+                      className="bg-emerald-500 hover:bg-emerald-400 text-black font-medium rounded-xl"
+                      onClick={() => router.push(session ? "/dashboard" : "/login")}
+                    >
+                      Get Started <ArrowRight className="ml-1 h-4 w-4" />
+                    </Button>
+                  </DialogTrigger>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
         </section>
 
