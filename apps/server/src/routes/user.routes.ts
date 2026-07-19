@@ -8,6 +8,7 @@ import {
   searchUsers,
   issueToken,
   getCreditScore,
+  requestAirdrop,
 } from "../controllers/user.controller.js";
 import { authMiddleware } from "../middleware/auth.middleware.js";
 
@@ -19,6 +20,7 @@ router.post("/onboarding", completeOnboarding);                    // POST /user
 router.post("/", createUser);                                       // POST /users  (legacy wallet init)
 router.get("/me", authMiddleware, getUser);                        // GET  /users/me
 router.get("/me/credit-score", authMiddleware, getCreditScore);   // GET  /users/me/credit-score
+router.post("/me/airdrop", authMiddleware, requestAirdrop);         // POST /users/me/airdrop
 router.get("/search", authMiddleware, searchUsers);                // GET  /users/search?q=...
 router.get("/:userId/profile", authMiddleware, getPublicProfile); // GET  /users/:userId/profile
 

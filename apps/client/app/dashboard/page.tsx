@@ -14,6 +14,8 @@ import {
   ExternalLink,
   Plus,
   ArrowRight,
+  Coins,
+  Loader2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -66,10 +68,12 @@ const statusConfig: Record<LoanStatus, { label: string; color: string; icon: Rea
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const [loans, setLoans] = useState<Loan[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
+  const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [airdropping, setAirdropping] = useState(false);
 
   useEffect(() => {
     async function fetchData() {
@@ -77,13 +81,24 @@ export default function DashboardPage() {
         const token = session?.user ? await getJwt() : null;
         if (!token) { setLoading(false); return; }
 
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/loans`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const data = await res.json();
+        const [loansRes, profileRes] = await Promise.all([
+          fetch(`${process.env.NEXT_PUBLIC_API_URL}/loans`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/me`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+        ]);
+
+        if (loansRes.ok) {
+          const data = await loansRes.json();
           setLoans(data.loans?.slice(0, 5) || []);
           setStats(data.stats || null);
+        }
+
+        if (profileRes.ok) {
+          const data = await profileRes.json();
+          setProfile(data.user || null);
         }
       } catch (e) {
         console.error(e);
@@ -95,12 +110,41 @@ export default function DashboardPage() {
   }, [session]);
 
   const user = session?.user;
-  const walletAddress = (user as any)?.walletAddress;
+  const walletAddress = profile?.walletAddress || (user as any)?.walletAddress;
 
   function copyWallet() {
     if (walletAddress) {
       navigator.clipboard.writeText(walletAddress);
       toast.success("Wallet address copied!");
+    }
+  }
+
+  async function requestAirdrop() {
+    setAirdropping(true);
+    try {
+      const token = await getJwt();
+      if (!token) {
+        toast.error("Authentication token not found.");
+        return;
+      }
+
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/me/airdrop`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        toast.success(data.message || "Airdrop completed successfully!");
+      } else {
+        toast.error(data.message || "Airdrop failed.");
+      }
+    } catch (e) {
+      toast.error("Failed to request airdrop. Please ensure the local blockchain node is running.");
+    } finally {
+      setAirdropping(false);
     }
   }
 
@@ -131,35 +175,57 @@ export default function DashboardPage() {
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
               Your Wallet Address
             </p>
-            <p className="font-mono text-sm font-semibold text-emerald-400">
-              {walletAddress ? truncateAddr(walletAddress) : "Wallet not initialized"}
-            </p>
+            <div className="font-mono text-sm font-semibold text-emerald-400 min-h-[20px] flex items-center">
+              {status === "loading" || loading ? (
+                <Skeleton className="h-4 w-32 bg-emerald-500/20" />
+              ) : walletAddress ? (
+                truncateAddr(walletAddress)
+              ) : (
+                "Wallet not initialized"
+              )}
+            </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Button
               variant="outline"
               size="sm"
               className="gap-1.5 rounded-xl border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
               onClick={copyWallet}
-              disabled={!walletAddress}
+              disabled={loading || !walletAddress}
             >
               <Copy className="h-3.5 w-3.5" /> Copy
             </Button>
             {walletAddress && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-1.5 rounded-xl border-border"
-                asChild
-              >
-                <a
-                  href={`https://sepolia.etherscan.io/address/${walletAddress}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 rounded-xl border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+                  onClick={requestAirdrop}
+                  disabled={airdropping}
                 >
-                  <ExternalLink className="h-3.5 w-3.5" /> Etherscan
-                </a>
-              </Button>
+                  {airdropping ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Coins className="h-3.5 w-3.5" />
+                  )}
+                  {airdropping ? "Airdropping..." : "Request Airdrop"}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 rounded-xl border-border"
+                  asChild
+                >
+                  <a
+                    href={`https://sepolia.etherscan.io/address/${walletAddress}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" /> Etherscan
+                  </a>
+                </Button>
+              </>
             )}
           </div>
         </CardContent>

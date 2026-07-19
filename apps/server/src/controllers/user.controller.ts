@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import prisma from "@repo/db";
-import { generateWallet, getDeployer, ethers, ensureGasFunds } from "../services/blockchain.service.js";
+import { generateWallet, getDeployer, ethers, ensureGasFunds, getProvider } from "../services/blockchain.service.js";
 import { deployDebtToken } from "../services/token.service.js";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
@@ -327,3 +327,48 @@ export const getCreditScore = async (req: Request, res: Response) => {
     return res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 };
+
+/**
+ * POST /users/me/airdrop
+ * Fund the authenticated user's wallet with gas (ETH) from the deployer.
+ */
+export const requestAirdrop = async (req: Request, res: Response) => {
+  try {
+    const user = req.user!;
+    if (!user.walletAddress) {
+      return res.status(400).json({ success: false, message: "No wallet address associated with this account" });
+    }
+
+    const provider = getProvider();
+    const balanceBefore = await provider.getBalance(user.walletAddress);
+
+    // Call ensureGasFunds
+    await ensureGasFunds(user.walletAddress);
+
+    const balanceAfter = await provider.getBalance(user.walletAddress);
+
+    if (balanceAfter > balanceBefore) {
+      return res.json({
+        success: true,
+        message: "Wallet funded successfully!",
+        balance: ethers.formatEther(balanceAfter),
+      });
+    } else {
+      if (balanceBefore >= ethers.parseEther("0.01")) {
+        return res.json({
+          success: true,
+          message: "Wallet already has sufficient gas funds.",
+          balance: ethers.formatEther(balanceBefore),
+        });
+      }
+      return res.status(500).json({
+        success: false,
+        message: "Airdrop failed. Please ensure the local blockchain node is running.",
+      });
+    }
+  } catch (error: any) {
+    console.error("[requestAirdrop]", error);
+    return res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+};
+
