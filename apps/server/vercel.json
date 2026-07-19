@@ -1,16 +1,10 @@
 {
-    "version": 2,
-    "buildCommand": "cd ../.. && pnpm --filter @repo/db db:generate && pnpm install && pnpm exec turbo run build --filter=server",
-    "builds": [
-        {
-            "src": "api/index.js",
-            "use": "@vercel/node"
-        }
-    ],
-    "routes": [
-        {
-            "src": "/(.*)",
-            "dest": "/api/index.js"
-        }
-    ]
+  "version": 2,
+  "buildCommand": "cd ../.. && pnpm --filter @repo/db db:generate && pnpm install && pnpm exec turbo run build --filter=server",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/api"
+    }
+  ]
 }
