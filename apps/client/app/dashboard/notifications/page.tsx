@@ -59,7 +59,7 @@ function RequestCard({ req, isPublic }: { req: LoanRequest; isPublic: boolean })
   const b = req.borrower;
   
   return (
-    <Card className="relative overflow-hidden border-border/40 bg-card/30 backdrop-blur-md hover:border-emerald-500/30 transition-all duration-300 hover:shadow-[0_0_20px_-5px_rgba(16,185,129,0.12)] group">
+    <Card className="relative overflow-hidden border border-border/40 bg-card/30 backdrop-blur-md hover:border-emerald-500/30 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_12px_24px_-10px_rgba(16,185,129,0.15)] group">
       {/* Visual Accent Glow */}
       <div className={cn(
         "absolute top-0 left-0 w-full h-[2px] opacity-70 transition-opacity group-hover:opacity-100",
@@ -112,12 +112,12 @@ function RequestCard({ req, isPublic }: { req: LoanRequest; isPublic: boolean })
         </div>
 
         {/* Loan Details Box */}
-        <div className="grid grid-cols-2 gap-3 bg-muted/20 border border-border/30 rounded-xl p-3 text-xs">
+        <div className="grid grid-cols-2 gap-4 bg-accent/20 border border-border/20 rounded-2xl p-4 text-xs">
           <div className="space-y-1">
             <span className="text-[10px] text-muted-foreground block uppercase tracking-wider">Amount</span>
             <span className="font-bold text-foreground text-sm flex items-center gap-0.5">
               <IndianRupee className="h-3 w-3 text-emerald-400" />
-              <span>{Number(req.amountINR).toLocaleString("en-IN")}</span>
+              <span className="text-base font-extrabold text-emerald-400">{Number(req.amountINR).toLocaleString("en-IN")}</span>
             </span>
           </div>
 
@@ -125,7 +125,7 @@ function RequestCard({ req, isPublic }: { req: LoanRequest; isPublic: boolean })
             <span className="text-[10px] text-muted-foreground block uppercase tracking-wider">Duration</span>
             <span className="font-semibold text-foreground flex items-center gap-1">
               <Clock className="h-3.5 w-3.5 text-cyan-400" />
-              <span>{req.durationDays} days</span>
+              <span className="text-sm font-bold">{req.durationDays} days</span>
             </span>
           </div>
         </div>
@@ -140,7 +140,7 @@ function RequestCard({ req, isPublic }: { req: LoanRequest; isPublic: boolean })
         )}
 
         {/* Actions & Tag */}
-        <div className="flex items-center justify-between pt-2 border-t border-border/35">
+        <div className="flex items-center justify-between pt-3 border-t border-border/35">
           <div className="text-[10px] text-muted-foreground">
             {new Date(req.createdAt).toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric" })}
           </div>
@@ -149,7 +149,7 @@ function RequestCard({ req, isPublic }: { req: LoanRequest; isPublic: boolean })
             <Button
               size="sm"
               variant="outline"
-              className="h-8 rounded-xl gap-1 px-3 text-xs font-semibold border-emerald-500/20 bg-emerald-500/5 text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/30 transition-all"
+              className="h-8 rounded-xl gap-1.5 px-4 text-xs font-semibold border-emerald-500/20 bg-emerald-500/5 text-emerald-400 hover:bg-emerald-500 hover:text-black hover:border-emerald-500 transition-all duration-300 shadow-[0_0_15px_rgba(16,185,129,0.05)]"
               id={`check-details-${req.id}`}
             >
               Verify Terms <ChevronRight className="h-3.5 w-3.5" />
@@ -165,13 +165,14 @@ function RequestCard({ req, isPublic }: { req: LoanRequest; isPublic: boolean })
 
 function EmptyPanel({ message, title, icon: Icon }: { message: string; title: string; icon: any }) {
   return (
-    <Card className="border-dashed border-border/60 bg-card/10 py-16 px-4 backdrop-blur-sm">
-      <CardContent className="flex flex-col items-center justify-center text-center max-w-sm mx-auto">
-        <div className="rounded-2xl bg-muted/40 p-4 mb-4 ring-1 ring-border/50">
-          <Icon className="h-8 w-8 text-muted-foreground/60" />
+    <Card className="relative overflow-hidden border border-border/40 bg-card/25 py-20 px-6 text-center backdrop-blur-xl rounded-2xl max-w-xl mx-auto shadow-2xl">
+      <div className="absolute inset-0 bg-gradient-to-b from-emerald-500/5 to-transparent pointer-events-none" />
+      <CardContent className="flex flex-col items-center justify-center relative z-10">
+        <div className="rounded-2xl bg-emerald-500/10 p-4 mb-5 ring-1 ring-emerald-500/20 shadow-inner">
+          <Icon className="h-10 w-10 text-emerald-400 animate-pulse" />
         </div>
-        <h3 className="text-base font-semibold text-foreground">{title}</h3>
-        <p className="text-xs text-muted-foreground/75 mt-2 leading-relaxed">
+        <h3 className="text-lg font-bold tracking-tight text-foreground">{title}</h3>
+        <p className="text-sm text-muted-foreground/80 mt-3 max-w-sm leading-relaxed">
           {message}
         </p>
       </CardContent>
