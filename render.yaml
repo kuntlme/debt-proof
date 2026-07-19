@@ -4,7 +4,7 @@ services:
     env: node
     plan: starter
     rootDir: apps/server
-    buildCommand: cd ../.. && corepack enable && corepack prepare pnpm@9.0.0 --activate && pnpm install && pnpm --filter @repo/db db:generate && pnpm exec turbo run build --filter=server
+    buildCommand: cd ../.. && corepack enable && corepack prepare pnpm@9.0.0 --activate && pnpm install && pnpm --filter @repo/db db:generate && pnpm install && pnpm exec turbo run build --filter=server
     startCommand: cd ../.. && pnpm --filter server start
     envVars:
       - key: PORT
