@@ -101,7 +101,7 @@ export default function LoansPage() {
         </div>
         <Link href="/dashboard/loans/new">
           <Button className="rounded-xl bg-emerald-500 text-black hover:bg-emerald-400 gap-2">
-            <Plus className="h-4 w-4" /> New IOU
+            <Plus className="h-4 w-4" /> New Loan
           </Button>
         </Link>
       </div>
@@ -159,7 +159,7 @@ export default function LoansPage() {
             {!search && (
               <Link href="/dashboard/loans/new">
                 <Button size="sm" className="rounded-xl bg-emerald-500 text-black hover:bg-emerald-400">
-                  <Plus className="h-3.5 w-3.5 mr-1" /> Create IOU
+                  <Plus className="h-3.5 w-3.5 mr-1" /> Create Loan
                 </Button>
               </Link>
             )}
